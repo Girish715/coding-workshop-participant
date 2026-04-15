@@ -17,7 +17,7 @@ def seed():
         # ---- Users & Employees ----
         users_data = [
             {"email": "admin@acme.com", "password": "admin123", "role": "admin",
-             "first": "Alice", "last": "Admin", "code": "EMP001", "dept": "HR", "desig": "HR Director"},
+             "first": "Supraja", "last": "Admin", "code": "EMP001", "dept": "HR", "desig": "HR Director"},
             {"email": "mgr1@acme.com", "password": "mgr123", "role": "manager",
              "first": "Bob", "last": "Manager", "code": "EMP002", "dept": "Engineering", "desig": "Engineering Manager"},
             {"email": "mgr2@acme.com", "password": "mgr123", "role": "manager",

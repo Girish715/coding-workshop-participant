@@ -63,7 +63,16 @@ const server = http.createServer((req, res) => {
   }
 
   const endpointName = pathParts[1];
-  const targetUrl = endpoints[endpointName] + (parsedUrl.search || '');
+  let targetUrl;
+
+  if (endpoints[endpointName]) {
+    // Direct endpoint match (e.g., /api/api-service, /api/seed-data)
+    targetUrl = endpoints[endpointName] + (parsedUrl.search || '');
+  } else if (endpoints['api-service']) {
+    // Route all other /api/* requests to api-service, preserving the full path
+    const baseLambdaUrl = endpoints['api-service'].replace(/\/$/, '');
+    targetUrl = baseLambdaUrl + parsedUrl.pathname + (parsedUrl.search || '');
+  }
 
   if (!targetUrl) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -74,7 +83,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  console.log(`${req.method} /api/${endpointName} -> ${targetUrl}`);
+  console.log(`${req.method} ${parsedUrl.pathname} -> ${targetUrl}`);
 
   // Parse target URL
   const target = url.parse(targetUrl);
@@ -96,12 +105,14 @@ const server = http.createServer((req, res) => {
     port: target.port,
     path: target.path,
     method: req.method,
-    headers: {
+    headers: Object.fromEntries(Object.entries({
       'accept': headers.accept || 'application/json',
       'content-type': headers['content-type'] || 'application/json',
+      'content-length': headers['content-length'],
+      'authorization': headers['authorization'],
       'user-agent': headers['user-agent'] || 'proxy-server',
       'host': target.host
-    }
+    }).filter(([, v]) => v !== undefined))
   };
 
   const proxyReq = protocol.request(options, (proxyRes) => {

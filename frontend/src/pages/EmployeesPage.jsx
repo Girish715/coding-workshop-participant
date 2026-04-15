@@ -1,22 +1,44 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, TextField, InputAdornment, Chip, Card, Avatar,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  CircularProgress,
+  TableSortLabel, CircularProgress, MenuItem,
 } from '@mui/material';
 import { Search } from '@mui/icons-material';
 import { getEmployees } from '../services/api.js';
 
 const statusCfg = {
-  active: { color: '#16a34a', bg: '#f0fdf4', label: 'Active' },
-  inactive: { color: '#9ca3af', bg: '#f9fafb', label: 'Inactive' },
-  on_leave: { color: '#ca8a04', bg: '#fefce8', label: 'On Leave' },
+  active: {
+    color: '#16a34a',
+    bg: '#f0fdf4',
+    darkColor: '#7af2d8',
+    darkBg: '#103a30',
+    label: 'Active',
+  },
+  inactive: {
+    color: '#6b7280',
+    bg: '#f3f4f6',
+    darkColor: '#d1d5db',
+    darkBg: '#2a2a2a',
+    label: 'Inactive',
+  },
+  on_leave: {
+    color: '#ca8a04',
+    bg: '#fefce8',
+    darkColor: '#ffd089',
+    darkBg: '#4b3416',
+    label: 'On Leave',
+  },
 };
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState([]);
   const [search, setSearch] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [sortField, setSortField] = useState('full_name');
+  const [sortDir, setSortDir] = useState('asc');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -26,26 +48,67 @@ export default function EmployeesPage() {
       .finally(() => setLoading(false));
   }, [search]);
 
+  const departments = useMemo(() => [...new Set(employees.map((e) => e.department))].sort(), [employees]);
+
+  const filtered = useMemo(() => {
+    let list = [...employees];
+    if (deptFilter) list = list.filter((e) => e.department === deptFilter);
+    if (statusFilter) list = list.filter((e) => e.status === statusFilter);
+    list.sort((a, b) => {
+      const av = (a[sortField] ?? '').toString().toLowerCase();
+      const bv = (b[sortField] ?? '').toString().toLowerCase();
+      return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+    return list;
+  }, [employees, deptFilter, statusFilter, sortField, sortDir]);
+
+  const handleSort = (field) => {
+    setSortDir(sortField === field && sortDir === 'asc' ? 'desc' : 'asc');
+    setSortField(field);
+  };
+
+  const cols = [
+    { id: 'full_name', label: 'Name' },
+    { id: 'department', label: 'Department' },
+    { id: 'designation', label: 'Role' },
+    { id: 'manager_name', label: 'Manager' },
+    { id: 'status', label: 'Status' },
+  ];
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2.5, flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h4">Employees</Typography>
-          <Typography sx={{ color: '#6b7280', mt: 0.5 }}>{employees.length} people</Typography>
+          <Typography sx={{ color: '#6b7280', mt: 0.5 }}>{filtered.length} of {employees.length} people</Typography>
         </Box>
-        <TextField
-          placeholder="Search by name or code..."
-          size="small"
-          sx={{ width: { xs: '100%', sm: 280 } }}
-          value={search}
-          onChange={(e) => { setLoading(true); setSearch(e.target.value); }}
-          InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: '#9ca3af', fontSize: 20 }} /></InputAdornment> }}
-        />
+        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+          <TextField
+            placeholder="Search by name or code..."
+            size="small"
+            sx={{ width: { xs: '100%', sm: 220 } }}
+            value={search}
+            onChange={(e) => { setLoading(true); setSearch(e.target.value); }}
+            InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: '#9ca3af', fontSize: 20 }} /></InputAdornment> }}
+          />
+          <TextField select size="small" label="Department" value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}
+            sx={{ minWidth: 150 }} displayEmpty
+          >
+            <MenuItem value="">All Departments</MenuItem>
+            {departments.map((d) => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+          </TextField>
+          <TextField select size="small" label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+            sx={{ minWidth: 130 }}
+          >
+            <MenuItem value="">All Statuses</MenuItem>
+            {Object.entries(statusCfg).map(([k, v]) => <MenuItem key={k} value={k}>{v.label}</MenuItem>)}
+          </TextField>
+        </Box>
       </Box>
 
       {loading ? (
         <Box display="flex" justifyContent="center" mt={8}><CircularProgress size={28} /></Box>
-      ) : employees.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Card sx={{ p: 4, textAlign: 'center' }}>
           <Typography sx={{ color: '#9ca3af' }}>No employees found.</Typography>
         </Card>
@@ -55,15 +118,17 @@ export default function EmployeesPage() {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Department</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Manager</TableCell>
-                  <TableCell>Status</TableCell>
+                  {cols.map((col) => (
+                    <TableCell key={col.id}>
+                      <TableSortLabel active={sortField === col.id} direction={sortField === col.id ? sortDir : 'asc'} onClick={() => handleSort(col.id)}>
+                        {col.label}
+                      </TableSortLabel>
+                    </TableCell>
+                  ))}
                 </TableRow>
               </TableHead>
               <TableBody>
-                {employees.map((emp) => {
+                {filtered.map((emp) => {
                   const s = statusCfg[emp.status] || statusCfg.inactive;
                   return (
                     <TableRow
@@ -86,7 +151,15 @@ export default function EmployeesPage() {
                       <TableCell><Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>{emp.designation}</Typography></TableCell>
                       <TableCell><Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>{emp.manager_name || '—'}</Typography></TableCell>
                       <TableCell>
-                        <Chip label={s.label} size="small" sx={{ bgcolor: s.bg, color: s.color, fontWeight: 500 }} />
+                        <Chip
+                          label={s.label}
+                          size="small"
+                          sx={{
+                            bgcolor: (theme) => (theme.palette.mode === 'dark' ? s.darkBg : s.bg),
+                            color: (theme) => (theme.palette.mode === 'dark' ? s.darkColor : s.color),
+                            fontWeight: 600,
+                          }}
+                        />
                       </TableCell>
                     </TableRow>
                   );

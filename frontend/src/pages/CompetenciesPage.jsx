@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Typography, Card, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Chip, IconButton, CircularProgress, Stack, Tabs, Tab,
+  Chip, IconButton, CircularProgress, Stack, Tabs, Tab, InputAdornment, TableSortLabel, useTheme,
 } from '@mui/material';
-import { Add, Delete } from '@mui/icons-material';
+import { Add, Delete, Search } from '@mui/icons-material';
 import {
   getCompetencyCatalog, createCompetency, getEmployeeCompetencies,
   createEmployeeCompetency, deleteEmployeeCompetency, getEmployees,
@@ -12,6 +12,8 @@ import {
 
 
 export default function CompetenciesPage() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [catalog, setCatalog] = useState([]);
   const [empComps, setEmpComps] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -21,6 +23,10 @@ export default function CompetenciesPage() {
   const [catForm, setCatForm] = useState({ name: '', category: '', description: '' });
   const [assignForm, setAssignForm] = useState({ employee_id: '', competency_id: '', current_level: 1, target_level: 3 });
   const [loading, setLoading] = useState(true);
+  const [assessmentSearch, setAssessmentSearch] = useState('');
+  const [gapFilter, setGapFilter] = useState('');
+  const [sortField, setSortField] = useState('employee_name');
+  const [sortDir, setSortDir] = useState('asc');
 
   const load = () => {
     setLoading(true);
@@ -33,6 +39,36 @@ export default function CompetenciesPage() {
   const saveCat = async () => { await createCompetency(catForm); setOpenCat(false); setCatForm({ name: '', category: '', description: '' }); load(); };
   const saveAssign = async () => { await createEmployeeCompetency(assignForm); setOpenAssign(false); load(); };
   const handleDeleteEC = async (id) => { if (window.confirm('Remove?')) { await deleteEmployeeCompetency(id); load(); } };
+
+  const filteredAssessments = useMemo(() => {
+    let list = [...empComps];
+    if (assessmentSearch.trim()) {
+      const q = assessmentSearch.toLowerCase();
+      list = list.filter((ec) =>
+        ec.employee_name?.toLowerCase().includes(q)
+        || ec.competency_name?.toLowerCase().includes(q)
+      );
+    }
+    if (gapFilter === 'met') list = list.filter((ec) => ec.gap === 0);
+    if (gapFilter === 'minor') list = list.filter((ec) => ec.gap === 1);
+    if (gapFilter === 'major') list = list.filter((ec) => ec.gap >= 2);
+    list.sort((a, b) => {
+      const av = a[sortField];
+      const bv = b[sortField];
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return sortDir === 'asc' ? av - bv : bv - av;
+      }
+      return sortDir === 'asc'
+        ? `${av ?? ''}`.localeCompare(`${bv ?? ''}`)
+        : `${bv ?? ''}`.localeCompare(`${av ?? ''}`);
+    });
+    return list;
+  }, [empComps, assessmentSearch, gapFilter, sortField, sortDir]);
+
+  const handleSort = (field) => {
+    setSortDir(sortField === field && sortDir === 'asc' ? 'desc' : 'asc');
+    setSortField(field);
+  };
 
   if (loading) return <Box display="flex" justifyContent="center" mt={10}><CircularProgress size={28} /></Box>;
 
@@ -68,7 +104,18 @@ export default function CompetenciesPage() {
                     {catalog.map((c) => (
                       <TableRow key={c.id} hover>
                         <TableCell sx={{ fontWeight: 600 }}>{c.name}</TableCell>
-                        <TableCell><Chip label={c.category} size="small" sx={{ bgcolor: '#f9fafb', textTransform: 'capitalize' }} /></TableCell>
+                        <TableCell>
+                          <Chip
+                            label={c.category}
+                            size="small"
+                            sx={{
+                              bgcolor: isDark ? '#2a2a2a' : '#f9fafb',
+                              color: isDark ? '#d1d5db' : '#6b7280',
+                              fontWeight: 600,
+                              textTransform: 'capitalize',
+                            }}
+                          />
+                        </TableCell>
                         <TableCell sx={{ color: '#6b7280' }}>{c.description}</TableCell>
                       </TableRow>
                     ))}
@@ -82,36 +129,80 @@ export default function CompetenciesPage() {
 
       {tab === 1 && (
         <>
+          <Typography sx={{ color: '#6b7280', mb: 1.25 }}>{filteredAssessments.length} of {empComps.length} assessments</Typography>
           <Button variant="contained" color="secondary" startIcon={<Add />} sx={{ mb: 2 }} onClick={() => setOpenAssign(true)}>Assign Competency</Button>
-          <Card>
-            <TableContainer>
-              <Table size="small">
-                <TableHead><TableRow>
-                  <TableCell>Employee</TableCell><TableCell>Competency</TableCell><TableCell>Current</TableCell>
-                  <TableCell>Target</TableCell><TableCell>Gap</TableCell><TableCell width={60}></TableCell>
-                </TableRow></TableHead>
-                <TableBody>
-                  {empComps.map((ec) => (
-                    <TableRow key={ec.id} hover>
-                      <TableCell sx={{ fontWeight: 600 }}>{ec.employee_name}</TableCell>
-                      <TableCell>{ec.competency_name}</TableCell>
-                      <TableCell>{ec.current_level}</TableCell>
-                      <TableCell>{ec.target_level}</TableCell>
-                      <TableCell>
-                        <Chip label={ec.gap === 0 ? 'Met' : `-${ec.gap}`} size="small" sx={{
-                          bgcolor: ec.gap >= 2 ? '#fef2f2' : ec.gap >= 1 ? '#fefce8' : '#f0fdf4',
-                          color: ec.gap >= 2 ? '#dc2626' : ec.gap >= 1 ? '#ca8a04' : '#16a34a', fontWeight: 600,
-                        }} />
-                      </TableCell>
-                      <TableCell>
-                        <IconButton size="small" onClick={() => handleDeleteEC(ec.id)} sx={{ color: '#dc2626' }}><Delete fontSize="small" /></IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Card>
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2.5 }}>
+            <TextField
+              placeholder="Search employee or competency..."
+              size="small"
+              value={assessmentSearch}
+              onChange={(e) => setAssessmentSearch(e.target.value)}
+              sx={{ width: { xs: '100%', sm: 280 } }}
+              InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: '#9ca3af', fontSize: 20 }} /></InputAdornment> }}
+            />
+            <TextField
+              select
+              size="small"
+              label="Gap"
+              value={gapFilter}
+              onChange={(e) => setGapFilter(e.target.value)}
+              sx={{ minWidth: 170 }}
+            >
+              <MenuItem value="">All Gaps</MenuItem>
+              <MenuItem value="met">Met</MenuItem>
+              <MenuItem value="minor">Minor gap (1)</MenuItem>
+              <MenuItem value="major">Major gap (2+)</MenuItem>
+            </TextField>
+          </Box>
+
+          {filteredAssessments.length === 0 ? (
+            <Card sx={{ p: 4, textAlign: 'center' }}>
+              <Typography sx={{ color: '#9ca3af' }}>{empComps.length === 0 ? 'No assessments found.' : 'No assessments match your filters.'}</Typography>
+            </Card>
+          ) : (
+            <Card>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead><TableRow>
+                    <TableCell><TableSortLabel active={sortField === 'employee_name'} direction={sortField === 'employee_name' ? sortDir : 'asc'} onClick={() => handleSort('employee_name')}>Employee</TableSortLabel></TableCell>
+                    <TableCell><TableSortLabel active={sortField === 'competency_name'} direction={sortField === 'competency_name' ? sortDir : 'asc'} onClick={() => handleSort('competency_name')}>Competency</TableSortLabel></TableCell>
+                    <TableCell><TableSortLabel active={sortField === 'current_level'} direction={sortField === 'current_level' ? sortDir : 'asc'} onClick={() => handleSort('current_level')}>Current</TableSortLabel></TableCell>
+                    <TableCell><TableSortLabel active={sortField === 'target_level'} direction={sortField === 'target_level' ? sortDir : 'asc'} onClick={() => handleSort('target_level')}>Target</TableSortLabel></TableCell>
+                    <TableCell><TableSortLabel active={sortField === 'gap'} direction={sortField === 'gap' ? sortDir : 'asc'} onClick={() => handleSort('gap')}>Gap</TableSortLabel></TableCell>
+                    <TableCell width={60}></TableCell>
+                  </TableRow></TableHead>
+                  <TableBody>
+                    {filteredAssessments.map((ec) => (
+                      <TableRow key={ec.id} hover>
+                        <TableCell sx={{ fontWeight: 600 }}>{ec.employee_name}</TableCell>
+                        <TableCell>{ec.competency_name}</TableCell>
+                        <TableCell>{ec.current_level}</TableCell>
+                        <TableCell>{ec.target_level}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={ec.gap === 0 ? 'Met' : `-${ec.gap}`}
+                            size="small"
+                            sx={{
+                              bgcolor: isDark
+                                ? (ec.gap >= 2 ? '#4b1f24' : ec.gap >= 1 ? '#4b3416' : '#103a30')
+                                : (ec.gap >= 2 ? '#fef2f2' : ec.gap >= 1 ? '#fefce8' : '#f0fdf4'),
+                              color: isDark
+                                ? (ec.gap >= 2 ? '#ff9aa8' : ec.gap >= 1 ? '#ffd089' : '#7af2d8')
+                                : (ec.gap >= 2 ? '#dc2626' : ec.gap >= 1 ? '#ca8a04' : '#16a34a'),
+                              fontWeight: 600,
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <IconButton size="small" onClick={() => handleDeleteEC(ec.id)} sx={{ color: '#dc2626' }}><Delete fontSize="small" /></IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Card>
+          )}
         </>
       )}
 

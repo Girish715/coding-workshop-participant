@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Card, CardContent, Grid, Chip, Tabs, Tab,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  LinearProgress, CircularProgress, Rating, Avatar, Breadcrumbs, Link,
+  LinearProgress, CircularProgress, Rating, Avatar, Breadcrumbs, Link, Button,
 } from '@mui/material';
+import { ArrowBack } from '@mui/icons-material';
 import { getEmployee, getReviews, getDevPlans, getEmployeeCompetencies, getTraining } from '../services/api.js';
 
 const statusCfg = {
@@ -49,10 +50,16 @@ export default function EmployeeDetailPage() {
 
   return (
     <Box>
-      <Breadcrumbs sx={{ mb: 2, fontSize: '0.8125rem' }}>
-        <Link underline="hover" color="inherit" onClick={() => navigate('/employees')} sx={{ cursor: 'pointer' }}>Employees</Link>
-        <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{emp.full_name}</Typography>
-      </Breadcrumbs>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+        <Button size="small" startIcon={<ArrowBack />} onClick={() => navigate(-1)}
+          sx={{ color: '#64748b', textTransform: 'none', fontWeight: 600, '&:hover': { bgcolor: '#f1f5f9' } }}>
+          Back
+        </Button>
+        <Breadcrumbs sx={{ fontSize: '0.8125rem' }}>
+          <Link underline="hover" color="inherit" onClick={() => navigate('/employees')} sx={{ cursor: 'pointer' }}>Employees</Link>
+          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{emp.full_name}</Typography>
+        </Breadcrumbs>
+      </Box>
 
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ p: 3 }}>

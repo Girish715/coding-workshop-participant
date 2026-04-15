@@ -1,24 +1,36 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, MenuItem, Grid, Chip, LinearProgress, IconButton,
-  CircularProgress, Stack,
+  CircularProgress, Stack, InputAdornment, useTheme,
 } from '@mui/material';
-import { Add, Edit, Delete } from '@mui/icons-material';
+import { Add, Edit, Delete, Search } from '@mui/icons-material';
 import { getDevPlans, createDevPlan, updateDevPlan, deleteDevPlan, getEmployees } from '../services/api.js';
 
 const EMPTY = { employee_id: '', title: '', description: '', goal_type: 'skill', target_date: '', status: 'not_started', progress_pct: 0 };
 const GOAL_TYPES = ['career', 'skill', 'leadership', 'technical'];
 const STATUSES = ['not_started', 'in_progress', 'completed', 'on_hold'];
-const statusCfg = { completed: { c: '#16a34a', b: '#f0fdf4' }, in_progress: { c: '#3b82f6', b: '#eff6ff' }, not_started: { c: '#9ca3af', b: '#f9fafb' }, on_hold: { c: '#ca8a04', b: '#fefce8' } };
+const statusCfg = {
+  completed: { c: '#16a34a', b: '#f0fdf4', dc: '#7af2d8', db: '#103a30' },
+  in_progress: { c: '#3b82f6', b: '#eff6ff', dc: '#9fcbff', db: '#1f304b' },
+  not_started: { c: '#6b7280', b: '#f3f4f6', dc: '#d1d5db', db: '#2a2a2a' },
+  on_hold: { c: '#ca8a04', b: '#fefce8', dc: '#ffd089', db: '#4b3416' },
+};
 
 export default function DevPlansPage() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [plans, setPlans] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [goalFilter, setGoalFilter] = useState('');
+  const [sortField, setSortField] = useState('employee_name');
+  const [sortDir, setSortDir] = useState('asc');
 
   const load = () => {
     setLoading(true);
@@ -41,6 +53,31 @@ export default function DevPlansPage() {
   const handleDelete = async (id) => { if (window.confirm('Delete this plan?')) { await deleteDevPlan(id); load(); } };
   const f = (field) => ({ value: form[field] ?? '', onChange: (e) => setForm({ ...form, [field]: e.target.value }) });
 
+  const filteredPlans = useMemo(() => {
+    let list = [...plans];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((p) =>
+        p.employee_name?.toLowerCase().includes(q)
+        || p.title?.toLowerCase().includes(q)
+        || p.description?.toLowerCase().includes(q)
+      );
+    }
+    if (statusFilter) list = list.filter((p) => p.status === statusFilter);
+    if (goalFilter) list = list.filter((p) => p.goal_type === goalFilter);
+    list.sort((a, b) => {
+      const av = a[sortField];
+      const bv = b[sortField];
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return sortDir === 'asc' ? av - bv : bv - av;
+      }
+      return sortDir === 'asc'
+        ? `${av ?? ''}`.localeCompare(`${bv ?? ''}`)
+        : `${bv ?? ''}`.localeCompare(`${av ?? ''}`);
+    });
+    return list;
+  }, [plans, search, statusFilter, goalFilter, sortField, sortDir]);
+
   if (loading) return <Box display="flex" justifyContent="center" mt={10}><CircularProgress size={28} /></Box>;
 
   return (
@@ -48,18 +85,58 @@ export default function DevPlansPage() {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h4">Dev Plans</Typography>
-          <Typography sx={{ color: '#6b7280', mt: 0.5 }}>{plans.length} plan{plans.length !== 1 ? 's' : ''}</Typography>
+          <Typography sx={{ color: '#6b7280', mt: 0.5 }}>{filteredPlans.length} of {plans.length} plan{plans.length !== 1 ? 's' : ''}</Typography>
         </Box>
         <Button variant="contained" color="secondary" startIcon={<Add />} onClick={() => handleOpen()}>New Plan</Button>
       </Box>
 
-      {plans.length === 0 ? (
+      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2.5 }}>
+        <TextField
+          placeholder="Search employee or plan..."
+          size="small"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ width: { xs: '100%', sm: 280 } }}
+          InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: '#9ca3af', fontSize: 20 }} /></InputAdornment> }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Status"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          sx={{ minWidth: 150 }}
+        >
+          <MenuItem value="">All Statuses</MenuItem>
+          {STATUSES.map((status) => <MenuItem key={status} value={status} sx={{ textTransform: 'capitalize' }}>{status.replace('_', ' ')}</MenuItem>)}
+        </TextField>
+        <TextField select size="small" label="Goal Type" value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} sx={{ minWidth: 150 }}>
+          <MenuItem value="">All Goal Types</MenuItem>
+          {GOAL_TYPES.map((goal) => <MenuItem key={goal} value={goal} sx={{ textTransform: 'capitalize' }}>{goal}</MenuItem>)}
+        </TextField>
+        <TextField select size="small" label="Sort By" value={`${sortField}:${sortDir}`} onChange={(e) => {
+          const [field, dir] = e.target.value.split(':');
+          setSortField(field);
+          setSortDir(dir);
+        }} sx={{ minWidth: 190 }}>
+          <MenuItem value="employee_name:asc">Sort: Employee (A-Z)</MenuItem>
+          <MenuItem value="employee_name:desc">Sort: Employee (Z-A)</MenuItem>
+          <MenuItem value="title:asc">Sort: Title (A-Z)</MenuItem>
+          <MenuItem value="title:desc">Sort: Title (Z-A)</MenuItem>
+          <MenuItem value="progress_pct:desc">Sort: Progress (High-Low)</MenuItem>
+          <MenuItem value="progress_pct:asc">Sort: Progress (Low-High)</MenuItem>
+          <MenuItem value="target_date:asc">Sort: Target Date (Earliest)</MenuItem>
+          <MenuItem value="target_date:desc">Sort: Target Date (Latest)</MenuItem>
+        </TextField>
+      </Box>
+
+      {filteredPlans.length === 0 ? (
         <Card sx={{ p: 4, textAlign: 'center' }}>
-          <Typography sx={{ color: '#9ca3af' }}>No plans yet.</Typography>
+          <Typography sx={{ color: '#9ca3af' }}>{plans.length === 0 ? 'No plans yet.' : 'No plans match your filters.'}</Typography>
         </Card>
       ) : (
         <Grid container spacing={2}>
-          {plans.map((p) => {
+          {filteredPlans.map((p) => {
             const stc = statusCfg[p.status] || statusCfg.not_started;
             return (
               <Grid item xs={12} sm={6} lg={4} key={p.id}>
@@ -75,8 +152,26 @@ export default function DevPlansPage() {
                     <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mb: 0.5 }}>{p.employee_name}</Typography>
                     <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280', mb: 1.5, lineHeight: 1.5 }}>{p.description}</Typography>
                     <Box sx={{ display: 'flex', gap: 0.5, mb: 1.5 }}>
-                      <Chip label={p.goal_type} size="small" sx={{ bgcolor: '#f9fafb', textTransform: 'capitalize' }} />
-                      <Chip label={p.status.replace('_', ' ')} size="small" sx={{ bgcolor: stc.b, color: stc.c, fontWeight: 500, textTransform: 'capitalize' }} />
+                      <Chip
+                        label={p.goal_type}
+                        size="small"
+                        sx={{
+                          bgcolor: isDark ? '#2a2a2a' : '#f9fafb',
+                          color: isDark ? '#d1d5db' : '#6b7280',
+                          fontWeight: 600,
+                          textTransform: 'capitalize',
+                        }}
+                      />
+                      <Chip
+                        label={p.status.replace('_', ' ')}
+                        size="small"
+                        sx={{
+                          bgcolor: isDark ? stc.db : stc.b,
+                          color: isDark ? stc.dc : stc.c,
+                          fontWeight: 600,
+                          textTransform: 'capitalize',
+                        }}
+                      />
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                       <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Progress</Typography>

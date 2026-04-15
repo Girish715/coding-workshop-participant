@@ -90,7 +90,7 @@ fi
 # Handle empty API base URL (valid for local development - uses direct Lambda URLs)
 if [ -z "$API_BASE_URL" ]; then
     echo "API Base URL: (empty - using direct Lambda Function URLs)"
-    API_BASE_URL="http://localhost:3001"
+    API_BASE_URL="http://localhost:3001/api"
 else
     echo "API Base URL: $API_BASE_URL"
 fi

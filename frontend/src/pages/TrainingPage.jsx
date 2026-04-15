@@ -1,25 +1,37 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Typography, Card, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Chip, IconButton, CircularProgress, Stack,
+  Chip, IconButton, CircularProgress, Stack, InputAdornment, TableSortLabel, useTheme,
 } from '@mui/material';
-import { Add, Edit, Delete } from '@mui/icons-material';
+import { Add, Edit, Delete, Search } from '@mui/icons-material';
 import { getTraining, createTraining, updateTraining, deleteTraining, getEmployees } from '../services/api.js';
 
 const EMPTY = { employee_id: '', training_name: '', provider: '', training_type: 'course', start_date: '', end_date: '', status: 'enrolled', score: '' };
 const TYPES = ['course', 'workshop', 'certification', 'mentoring'];
 const STATUSES = ['enrolled', 'in_progress', 'completed', 'dropped'];
-const statusCfg = { enrolled: { c: '#3b82f6', b: '#eff6ff' }, in_progress: { c: '#3b82f6', b: '#eff6ff' }, completed: { c: '#10b981', b: '#ecfdf5' }, dropped: { c: '#ef4444', b: '#fef2f2' } };
+const statusCfg = {
+  enrolled: { c: '#3b82f6', b: '#eff6ff', dc: '#9fcbff', db: '#1f304b' },
+  in_progress: { c: '#3b82f6', b: '#eff6ff', dc: '#9fcbff', db: '#1f304b' },
+  completed: { c: '#10b981', b: '#ecfdf5', dc: '#7af2d8', db: '#103a30' },
+  dropped: { c: '#ef4444', b: '#fef2f2', dc: '#ff9aa8', db: '#4b1f24' },
+};
 
 
 export default function TrainingPage() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [records, setRecords] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [sortField, setSortField] = useState('employee_name');
+  const [sortDir, setSortDir] = useState('asc');
 
   const load = () => {
     setLoading(true);
@@ -43,6 +55,36 @@ export default function TrainingPage() {
   const handleDelete = async (id) => { if (window.confirm('Delete?')) { await deleteTraining(id); load(); } };
   const f = (field) => ({ value: form[field] ?? '', onChange: (e) => setForm({ ...form, [field]: e.target.value }) });
 
+  const filtered = useMemo(() => {
+    let list = [...records];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((r) =>
+        r.employee_name?.toLowerCase().includes(q)
+        || r.training_name?.toLowerCase().includes(q)
+        || r.provider?.toLowerCase().includes(q)
+      );
+    }
+    if (typeFilter) list = list.filter((r) => r.training_type === typeFilter);
+    if (statusFilter) list = list.filter((r) => r.status === statusFilter);
+    list.sort((a, b) => {
+      const av = a[sortField];
+      const bv = b[sortField];
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return sortDir === 'asc' ? av - bv : bv - av;
+      }
+      return sortDir === 'asc'
+        ? `${av ?? ''}`.localeCompare(`${bv ?? ''}`)
+        : `${bv ?? ''}`.localeCompare(`${av ?? ''}`);
+    });
+    return list;
+  }, [records, search, typeFilter, statusFilter, sortField, sortDir]);
+
+  const handleSort = (field) => {
+    setSortDir(sortField === field && sortDir === 'asc' ? 'desc' : 'asc');
+    setSortField(field);
+  };
+
   if (loading) return <Box display="flex" justifyContent="center" mt={10}><CircularProgress size={28} /></Box>;
 
   return (
@@ -50,33 +92,86 @@ export default function TrainingPage() {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h4">Training</Typography>
-          <Typography sx={{ color: '#6b7280', mt: 0.5 }}>{records.length} record{records.length !== 1 ? 's' : ''}</Typography>
+          <Typography sx={{ color: '#6b7280', mt: 0.5 }}>{filtered.length} of {records.length} record{records.length !== 1 ? 's' : ''}</Typography>
         </Box>
         <Button variant="contained" color="secondary" startIcon={<Add />} onClick={() => handleOpen()}>New Record</Button>
       </Box>
 
-      {records.length === 0 ? (
+      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2.5 }}>
+        <TextField
+          placeholder="Search employee, training, provider..."
+          size="small"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ width: { xs: '100%', sm: 280 } }}
+          InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: '#9ca3af', fontSize: 20 }} /></InputAdornment> }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Type"
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value="">All Types</MenuItem>
+          {TYPES.map((type) => <MenuItem key={type} value={type} sx={{ textTransform: 'capitalize' }}>{type}</MenuItem>)}
+        </TextField>
+        <TextField select size="small" label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} sx={{ minWidth: 150 }}>
+          <MenuItem value="">All Statuses</MenuItem>
+          {STATUSES.map((status) => <MenuItem key={status} value={status} sx={{ textTransform: 'capitalize' }}>{status.replace('_', ' ')}</MenuItem>)}
+        </TextField>
+      </Box>
+
+      {filtered.length === 0 ? (
         <Card sx={{ p: 4, textAlign: 'center' }}>
-          <Typography sx={{ color: '#9ca3af' }}>No training records yet.</Typography>
+          <Typography sx={{ color: '#9ca3af' }}>{records.length === 0 ? 'No training records yet.' : 'No records match your filters.'}</Typography>
         </Card>
       ) : (
         <Card>
           <TableContainer>
             <Table>
               <TableHead><TableRow>
-                <TableCell>Employee</TableCell><TableCell>Training</TableCell><TableCell>Provider</TableCell>
-                <TableCell>Type</TableCell><TableCell>Status</TableCell><TableCell>Score</TableCell><TableCell width={100}>Actions</TableCell>
+                <TableCell><TableSortLabel active={sortField === 'employee_name'} direction={sortField === 'employee_name' ? sortDir : 'asc'} onClick={() => handleSort('employee_name')}>Employee</TableSortLabel></TableCell>
+                <TableCell><TableSortLabel active={sortField === 'training_name'} direction={sortField === 'training_name' ? sortDir : 'asc'} onClick={() => handleSort('training_name')}>Training</TableSortLabel></TableCell>
+                <TableCell><TableSortLabel active={sortField === 'provider'} direction={sortField === 'provider' ? sortDir : 'asc'} onClick={() => handleSort('provider')}>Provider</TableSortLabel></TableCell>
+                <TableCell><TableSortLabel active={sortField === 'training_type'} direction={sortField === 'training_type' ? sortDir : 'asc'} onClick={() => handleSort('training_type')}>Type</TableSortLabel></TableCell>
+                <TableCell><TableSortLabel active={sortField === 'status'} direction={sortField === 'status' ? sortDir : 'asc'} onClick={() => handleSort('status')}>Status</TableSortLabel></TableCell>
+                <TableCell><TableSortLabel active={sortField === 'score'} direction={sortField === 'score' ? sortDir : 'asc'} onClick={() => handleSort('score')}>Score</TableSortLabel></TableCell>
+                <TableCell width={100}>Actions</TableCell>
               </TableRow></TableHead>
               <TableBody>
-                {records.map((r) => {
+                {filtered.map((r) => {
                   const stc = statusCfg[r.status] || statusCfg.enrolled;
                   return (
                     <TableRow key={r.id} hover>
                       <TableCell sx={{ fontWeight: 600 }}>{r.employee_name}</TableCell>
                       <TableCell>{r.training_name}</TableCell>
                       <TableCell sx={{ color: '#6b7280' }}>{r.provider || '—'}</TableCell>
-                      <TableCell><Chip label={r.training_type} size="small" sx={{ bgcolor: '#f9fafb', textTransform: 'capitalize' }} /></TableCell>
-                      <TableCell><Chip label={r.status.replace('_', ' ')} size="small" sx={{ bgcolor: stc.b, color: stc.c, fontWeight: 500, textTransform: 'capitalize' }} /></TableCell>
+                      <TableCell>
+                        <Chip
+                          label={r.training_type}
+                          size="small"
+                          sx={{
+                            bgcolor: isDark ? '#2a2a2a' : '#f9fafb',
+                            color: isDark ? '#d1d5db' : '#6b7280',
+                            fontWeight: 600,
+                            textTransform: 'capitalize',
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={r.status.replace('_', ' ')}
+                          size="small"
+                          sx={{
+                            bgcolor: isDark ? stc.db : stc.b,
+                            color: isDark ? stc.dc : stc.c,
+                            fontWeight: 600,
+                            textTransform: 'capitalize',
+                          }}
+                        />
+                      </TableCell>
                       <TableCell>
                         {r.score != null ? (
                           <Typography sx={{ fontWeight: 600, color: r.score >= 90 ? '#16a34a' : r.score >= 70 ? '#ca8a04' : '#dc2626' }}>{r.score}%</Typography>

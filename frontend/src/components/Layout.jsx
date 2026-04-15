@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import {
   Menu as MenuIcon, Dashboard, People, RateReview, TrendingUp,
-  School, Psychology, Logout, Notifications, Settings, HelpOutline,
+  School, Psychology, Logout, Notifications, Settings, HelpOutline, DarkMode, LightMode,
 } from '@mui/icons-material';
 import { useAuth } from '../AuthContext.jsx';
 
@@ -22,7 +22,7 @@ const NAV = [
   { label: 'Training', icon: <School />, path: '/training' },
 ];
 
-export default function Layout() {
+export default function Layout({ colorMode, onToggleColorMode }) {
   const { user, employee, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,21 +31,21 @@ export default function Layout() {
   const [anchorEl, setAnchorEl] = useState(null);
 
   const drawerContent = (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#fff' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.paper' }}>
       {/* User info at top */}
       <Box sx={{ px: 2.5, pt: 2.5, pb: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Avatar sx={{ width: 38, height: 38, fontSize: 13, fontWeight: 700, bgcolor: '#0f172a' }}>
+        <Avatar sx={{ width: 38, height: 38, fontSize: 13, fontWeight: 700, bgcolor: 'primary.main', color: '#1c1207' }}>
           {employee ? `${employee.first_name[0]}${employee.last_name[0]}` : 'U'}
         </Avatar>
         <Box sx={{ overflow: 'hidden', flex: 1 }}>
           <Typography sx={{
-            fontSize: '0.875rem', fontWeight: 700, color: '#1d4ed8',
+            fontSize: '0.875rem', fontWeight: 700, color: 'primary.main',
             whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden',
           }}>
             {employee?.designation || employee?.full_name || 'User'}
           </Typography>
           <Typography sx={{
-            fontSize: '0.5625rem', fontWeight: 700, color: '#94a3b8',
+            fontSize: '0.5625rem', fontWeight: 700, color: 'text.secondary',
             textTransform: 'uppercase', letterSpacing: '0.06em',
           }}>
             Enterprise HR Portal
@@ -53,7 +53,7 @@ export default function Layout() {
         </Box>
       </Box>
 
-      <Divider sx={{ borderColor: '#f1f5f9' }} />
+      <Divider sx={{ borderColor: 'divider' }} />
 
       {/* Navigation */}
       <List sx={{ px: 0, py: 1, flexGrow: 1 }}>
@@ -65,11 +65,15 @@ export default function Layout() {
               onClick={() => { navigate(item.path); if (isMobile) setMobileOpen(false); }}
               sx={{
                 py: 1, px: 2.5,
-                borderLeft: isActive ? '3px solid #1d4ed8' : '3px solid transparent',
-                bgcolor: isActive ? '#eff6ff' : 'transparent',
-                color: isActive ? '#1d4ed8' : '#64748b',
-                '&:hover': { bgcolor: isActive ? '#eff6ff' : '#f8fafc', color: isActive ? '#1d4ed8' : '#0f172a' },
-                '& .MuiListItemIcon-root': { color: isActive ? '#1d4ed8' : '#94a3b8' },
+                borderLeft: isActive ? '3px solid' : '3px solid transparent',
+                borderLeftColor: isActive ? 'primary.main' : 'transparent',
+                bgcolor: isActive ? 'rgba(255, 122, 26, 0.16)' : 'transparent',
+                color: isActive ? 'primary.light' : 'text.secondary',
+                '&:hover': {
+                  bgcolor: isActive ? 'rgba(255, 122, 26, 0.24)' : 'rgba(255, 122, 26, 0.14)',
+                  color: isActive ? 'primary.light' : 'text.primary',
+                },
+                '& .MuiListItemIcon-root': { color: isActive ? 'primary.main' : 'text.secondary' },
                 transition: 'all 0.15s ease',
               }}
             >
@@ -82,13 +86,13 @@ export default function Layout() {
 
       {/* Bottom actions */}
       <Box sx={{ px: 1, pb: 2 }}>
-        <ListItemButton sx={{ py: 0.75, px: 2, borderRadius: 2, color: '#64748b', '&:hover': { bgcolor: '#f8fafc', color: '#0f172a' } }}>
+        <ListItemButton sx={{ py: 0.75, px: 2, borderRadius: 2, color: 'text.secondary', '&:hover': { bgcolor: 'rgba(255, 122, 26, 0.14)', color: 'text.primary' } }}>
           <ListItemIcon sx={{ minWidth: 34, color: 'inherit' }}><HelpOutline sx={{ fontSize: 20 }} /></ListItemIcon>
           <ListItemText primary="Support" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 500 }} />
         </ListItemButton>
         <ListItemButton
           onClick={() => { logout(); navigate('/login'); }}
-          sx={{ py: 0.75, px: 2, borderRadius: 2, color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}
+          sx={{ py: 0.75, px: 2, borderRadius: 2, color: '#ff7d7d', '&:hover': { bgcolor: 'rgba(239, 68, 68, 0.16)' } }}
         >
           <ListItemIcon sx={{ minWidth: 34, color: 'inherit' }}><Logout sx={{ fontSize: 20 }} /></ListItemIcon>
           <ListItemText primary="Sign Out" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 600 }} />
@@ -99,20 +103,23 @@ export default function Layout() {
 
   const permanentDrawerSx = {
     '& .MuiDrawer-paper': {
-      width: DRAWER_WIDTH, bgcolor: '#fff', borderRight: '1px solid #e2e8f0',
+      width: DRAWER_WIDTH, bgcolor: 'background.paper', borderRight: (theme) => `1px solid ${theme.palette.divider}`,
       top: TOPBAR_HEIGHT, height: `calc(100% - ${TOPBAR_HEIGHT}px)`,
     },
   };
   const mobileDrawerSx = {
-    '& .MuiDrawer-paper': { width: DRAWER_WIDTH, bgcolor: '#fff', borderRight: '1px solid #e2e8f0' },
+    '& .MuiDrawer-paper': { width: DRAWER_WIDTH, bgcolor: 'background.paper', borderRight: (theme) => `1px solid ${theme.palette.divider}` },
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#f1f5f9' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       {/* Dark top navbar — full width */}
       <AppBar position="fixed" elevation={0} sx={{
-        bgcolor: '#0f172a', color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1,
+        bgcolor: (theme) => (theme.palette.mode === 'dark' ? '#0b0b0b' : '#fff4e8'),
+        color: 'text.primary',
+        zIndex: (theme) => theme.zIndex.drawer + 1,
         height: TOPBAR_HEIGHT,
+        borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
       }}>
         <Toolbar sx={{ minHeight: TOPBAR_HEIGHT + 'px !important', px: { xs: 2, md: 3 } }}>
           {isMobile && (
@@ -126,38 +133,54 @@ export default function Layout() {
           <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 3.5 }}>
             <Typography
               onClick={() => navigate('/')}
-              sx={{ fontSize: '0.8125rem', fontWeight: 500, cursor: 'pointer', color: '#cbd5e1', transition: 'color 0.15s', '&:hover': { color: '#fff' } }}
+              sx={{ fontSize: '0.8125rem', fontWeight: 500, cursor: 'pointer', color: 'text.secondary', transition: 'color 0.15s', '&:hover': { color: 'primary.main' } }}
             >Overview</Typography>
             <Typography
               onClick={() => navigate('/employees')}
-              sx={{ fontSize: '0.8125rem', fontWeight: 500, cursor: 'pointer', color: '#cbd5e1', transition: 'color 0.15s', '&:hover': { color: '#fff' } }}
+              sx={{ fontSize: '0.8125rem', fontWeight: 500, cursor: 'pointer', color: 'text.secondary', transition: 'color 0.15s', '&:hover': { color: 'primary.main' } }}
             >Directory</Typography>
           </Box>
           <Box sx={{ flexGrow: 1 }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <IconButton size="small" sx={{ color: '#94a3b8', '&:hover': { color: '#fff' } }}>
+            <IconButton
+              size="small"
+              onClick={onToggleColorMode}
+              sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main', bgcolor: 'rgba(255, 122, 26, 0.12)' } }}
+            >
+              {colorMode === 'dark' ? <LightMode sx={{ fontSize: 20 }} /> : <DarkMode sx={{ fontSize: 20 }} />}
+            </IconButton>
+            <IconButton size="small" sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
               <Notifications sx={{ fontSize: 20 }} />
             </IconButton>
-            <IconButton size="small" sx={{ color: '#94a3b8', '&:hover': { color: '#fff' } }}>
+            <IconButton size="small" sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
               <Settings sx={{ fontSize: 20 }} />
             </IconButton>
             <Avatar
               onClick={(e) => setAnchorEl(e.currentTarget)}
-              sx={{ width: 32, height: 32, fontSize: 12, fontWeight: 700, bgcolor: '#334155', cursor: 'pointer', ml: 0.5 }}
+              sx={{ width: 32, height: 32, fontSize: 12, fontWeight: 700, bgcolor: 'primary.main', color: '#1c1207', cursor: 'pointer', ml: 0.5 }}
             >
               {employee ? `${employee.first_name[0]}${employee.last_name[0]}` : 'U'}
             </Avatar>
           </Box>
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}
-            PaperProps={{ sx: { mt: 1.5, border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.08)', minWidth: 220, borderRadius: 3 } }}
+            PaperProps={{
+              sx: {
+                mt: 1.5,
+                border: (theme) => `1px solid ${theme.palette.divider}`,
+                boxShadow: (theme) => (theme.palette.mode === 'dark' ? '0 10px 15px -3px rgb(0 0 0 / 0.4)' : '0 10px 15px -3px rgb(120 76 29 / 0.25)'),
+                minWidth: 220,
+                borderRadius: 3,
+                bgcolor: 'background.paper',
+              },
+            }}
           >
             <Box sx={{ px: 2, py: 1.5 }}>
               <Typography sx={{ fontWeight: 700, fontSize: '0.875rem' }}>{employee?.full_name}</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8' }}>{user?.email}</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{user?.email}</Typography>
             </Box>
             <Divider />
             <MenuItem onClick={() => { setAnchorEl(null); logout(); navigate('/login'); }}
-              sx={{ mx: 1, borderRadius: 2, mt: 0.5, mb: 0.5, color: '#ef4444', fontSize: '0.8125rem', fontWeight: 600 }}>
+              sx={{ mx: 1, borderRadius: 2, mt: 0.5, mb: 0.5, color: '#ff7d7d', fontSize: '0.8125rem', fontWeight: 600 }}>
               <Logout fontSize="small" sx={{ mr: 1.5 }} /> Sign out
             </MenuItem>
           </Menu>
