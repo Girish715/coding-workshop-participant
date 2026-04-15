@@ -54,6 +54,7 @@ class Employee(db.Model):
         return {
             "id": self.id,
             "user_id": self.user_id,
+            "role": self.user.role if self.user else "employee",
             "first_name": self.first_name,
             "last_name": self.last_name,
             "full_name": f"{self.first_name} {self.last_name}",

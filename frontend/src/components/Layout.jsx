@@ -8,11 +8,14 @@ import {
 import {
   Menu as MenuIcon, Dashboard, People, RateReview, TrendingUp,
   School, Psychology, Logout, Notifications, Settings, HelpOutline, DarkMode, LightMode,
+  ChevronLeft, ChevronRight,
 } from '@mui/icons-material';
 import { useAuth } from '../AuthContext.jsx';
 
 const DRAWER_WIDTH = 230;
+const COLLAPSED_DRAWER_WIDTH = 74;
 const TOPBAR_HEIGHT = 52;
+const SIDEBAR_COLLAPSE_STORAGE_KEY = 'acme-sidebar-collapsed';
 const NAV = [
   { label: 'Dashboard', icon: <Dashboard />, path: '/' },
   { label: 'Employees', icon: <People />, path: '/employees' },
@@ -29,46 +32,71 @@ export default function Layout({ colorMode, onToggleColorMode }) {
   const isMobile = useMediaQuery({ maxWidth: 900 });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY) === 'true');
+  const isEmployee = user?.role === 'employee';
+  const employeeNav = employee?.id
+    ? [
+      { label: 'Dashboard', icon: <Dashboard />, path: '/' },
+      { label: 'My Profile', icon: <People />, path: '/my-progress/profile' },
+      { label: 'My Reviews', icon: <RateReview />, path: '/my-progress/reviews' },
+      { label: 'My Dev Plans', icon: <TrendingUp />, path: '/my-progress/development-plans' },
+      { label: 'My Competencies', icon: <Psychology />, path: '/my-progress/competencies' },
+      { label: 'My Training', icon: <School />, path: '/my-progress/training' },
+    ]
+    : [{ label: 'Dashboard', icon: <Dashboard />, path: '/' }];
+  const navItems = isEmployee ? employeeNav : NAV;
+  const drawerWidth = sidebarCollapsed ? COLLAPSED_DRAWER_WIDTH : DRAWER_WIDTH;
+
+  const toggleSidebarCollapsed = () => {
+    setSidebarCollapsed((prevCollapsed) => {
+      const nextCollapsed = !prevCollapsed;
+      localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, String(nextCollapsed));
+      return nextCollapsed;
+    });
+  };
 
   const drawerContent = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.paper' }}>
       {/* User info at top */}
-      <Box sx={{ px: 2.5, pt: 2.5, pb: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Box sx={{ px: sidebarCollapsed ? 1 : 2.5, pt: 2.5, pb: 2, display: 'flex', alignItems: 'center', gap: 1.5, justifyContent: sidebarCollapsed ? 'center' : 'flex-start' }}>
         <Avatar sx={{ width: 38, height: 38, fontSize: 13, fontWeight: 700, bgcolor: 'primary.main', color: '#1c1207' }}>
           {employee ? `${employee.first_name[0]}${employee.last_name[0]}` : 'U'}
         </Avatar>
-        <Box sx={{ overflow: 'hidden', flex: 1 }}>
-          <Typography sx={{
-            fontSize: '0.875rem', fontWeight: 700, color: 'primary.main',
-            whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden',
-          }}>
-            {employee?.designation || employee?.full_name || 'User'}
-          </Typography>
-          <Typography sx={{
-            fontSize: '0.5625rem', fontWeight: 700, color: 'text.secondary',
-            textTransform: 'uppercase', letterSpacing: '0.06em',
-          }}>
-            Enterprise HR Portal
-          </Typography>
-        </Box>
+        {!sidebarCollapsed && (
+          <Box sx={{ overflow: 'hidden', flex: 1 }}>
+            <Typography sx={{
+              fontSize: '0.875rem', fontWeight: 700, color: 'primary.main',
+              whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden',
+            }}>
+              {employee?.designation || employee?.full_name || 'User'}
+            </Typography>
+            <Typography sx={{
+              fontSize: '0.5625rem', fontWeight: 700, color: 'text.secondary',
+              textTransform: 'uppercase', letterSpacing: '0.06em',
+            }}>
+              Enterprise HR Portal
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       <Divider sx={{ borderColor: 'divider' }} />
 
       {/* Navigation */}
       <List sx={{ px: 0, py: 1, flexGrow: 1 }}>
-        {NAV.map((item) => {
+        {navItems.map((item) => {
           const isActive = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
           return (
             <ListItemButton
               key={item.path}
               onClick={() => { navigate(item.path); if (isMobile) setMobileOpen(false); }}
               sx={{
-                py: 1, px: 2.5,
+                py: 1, px: sidebarCollapsed ? 1.25 : 2.5,
                 borderLeft: isActive ? '3px solid' : '3px solid transparent',
                 borderLeftColor: isActive ? 'primary.main' : 'transparent',
                 bgcolor: isActive ? 'rgba(255, 122, 26, 0.16)' : 'transparent',
                 color: isActive ? 'primary.light' : 'text.secondary',
+                justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
                 '&:hover': {
                   bgcolor: isActive ? 'rgba(255, 122, 26, 0.24)' : 'rgba(255, 122, 26, 0.14)',
                   color: isActive ? 'primary.light' : 'text.primary',
@@ -77,25 +105,27 @@ export default function Layout({ colorMode, onToggleColorMode }) {
                 transition: 'all 0.15s ease',
               }}
             >
-              <ListItemIcon sx={{ minWidth: 34, '& .MuiSvgIcon-root': { fontSize: 20 } }}>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: isActive ? 600 : 500 }} />
+              <ListItemIcon sx={{ minWidth: sidebarCollapsed ? 'auto' : 34, mr: sidebarCollapsed ? 0 : 0, '& .MuiSvgIcon-root': { fontSize: 20 } }}>{item.icon}</ListItemIcon>
+              {!sidebarCollapsed && (
+                <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: isActive ? 600 : 500 }} />
+              )}
             </ListItemButton>
           );
         })}
       </List>
 
       {/* Bottom actions */}
-      <Box sx={{ px: 1, pb: 2 }}>
-        <ListItemButton sx={{ py: 0.75, px: 2, borderRadius: 2, color: 'text.secondary', '&:hover': { bgcolor: 'rgba(255, 122, 26, 0.14)', color: 'text.primary' } }}>
-          <ListItemIcon sx={{ minWidth: 34, color: 'inherit' }}><HelpOutline sx={{ fontSize: 20 }} /></ListItemIcon>
-          <ListItemText primary="Support" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 500 }} />
+      <Box sx={{ px: sidebarCollapsed ? 0.5 : 1, pb: 2 }}>
+        <ListItemButton sx={{ py: 0.75, px: sidebarCollapsed ? 1 : 2, borderRadius: 2, color: 'text.secondary', justifyContent: sidebarCollapsed ? 'center' : 'flex-start', '&:hover': { bgcolor: 'rgba(255, 122, 26, 0.14)', color: 'text.primary' } }}>
+          <ListItemIcon sx={{ minWidth: sidebarCollapsed ? 'auto' : 34, color: 'inherit' }}><HelpOutline sx={{ fontSize: 20 }} /></ListItemIcon>
+          {!sidebarCollapsed && <ListItemText primary="Support" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 500 }} />}
         </ListItemButton>
         <ListItemButton
           onClick={() => { logout(); navigate('/login'); }}
-          sx={{ py: 0.75, px: 2, borderRadius: 2, color: '#ff7d7d', '&:hover': { bgcolor: 'rgba(239, 68, 68, 0.16)' } }}
+          sx={{ py: 0.75, px: sidebarCollapsed ? 1 : 2, borderRadius: 2, color: '#ff7d7d', justifyContent: sidebarCollapsed ? 'center' : 'flex-start', '&:hover': { bgcolor: 'rgba(239, 68, 68, 0.16)' } }}
         >
-          <ListItemIcon sx={{ minWidth: 34, color: 'inherit' }}><Logout sx={{ fontSize: 20 }} /></ListItemIcon>
-          <ListItemText primary="Sign Out" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 600 }} />
+          <ListItemIcon sx={{ minWidth: sidebarCollapsed ? 'auto' : 34, color: 'inherit' }}><Logout sx={{ fontSize: 20 }} /></ListItemIcon>
+          {!sidebarCollapsed && <ListItemText primary="Sign Out" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 600 }} />}
         </ListItemButton>
       </Box>
     </Box>
@@ -103,8 +133,10 @@ export default function Layout({ colorMode, onToggleColorMode }) {
 
   const permanentDrawerSx = {
     '& .MuiDrawer-paper': {
-      width: DRAWER_WIDTH, bgcolor: 'background.paper', borderRight: (theme) => `1px solid ${theme.palette.divider}`,
+      width: drawerWidth, bgcolor: 'background.paper', borderRight: (theme) => `1px solid ${theme.palette.divider}`,
       top: TOPBAR_HEIGHT, height: `calc(100% - ${TOPBAR_HEIGHT}px)`,
+      transition: 'width 0.2s ease',
+      overflowX: 'hidden',
     },
   };
   const mobileDrawerSx = {
@@ -127,6 +159,11 @@ export default function Layout({ colorMode, onToggleColorMode }) {
               <MenuIcon />
             </IconButton>
           )}
+          {!isMobile && (
+            <IconButton edge="start" color="inherit" onClick={toggleSidebarCollapsed} sx={{ mr: 1 }}>
+              {sidebarCollapsed ? <ChevronRight /> : <ChevronLeft />}
+            </IconButton>
+          )}
           <Typography sx={{ fontWeight: 800, fontSize: '1.05rem', mr: 4, letterSpacing: '-0.01em', cursor: 'pointer' }} onClick={() => navigate('/')}>
             ACME Inc.
           </Typography>
@@ -135,10 +172,18 @@ export default function Layout({ colorMode, onToggleColorMode }) {
               onClick={() => navigate('/')}
               sx={{ fontSize: '0.8125rem', fontWeight: 500, cursor: 'pointer', color: 'text.secondary', transition: 'color 0.15s', '&:hover': { color: 'primary.main' } }}
             >Overview</Typography>
-            <Typography
-              onClick={() => navigate('/employees')}
-              sx={{ fontSize: '0.8125rem', fontWeight: 500, cursor: 'pointer', color: 'text.secondary', transition: 'color 0.15s', '&:hover': { color: 'primary.main' } }}
-            >Directory</Typography>
+            {!isEmployee && (
+              <Typography
+                onClick={() => navigate('/employees')}
+                sx={{ fontSize: '0.8125rem', fontWeight: 500, cursor: 'pointer', color: 'text.secondary', transition: 'color 0.15s', '&:hover': { color: 'primary.main' } }}
+              >Directory</Typography>
+            )}
+            {isEmployee && employee?.id && (
+              <Typography
+                onClick={() => navigate('/my-progress/profile')}
+                sx={{ fontSize: '0.8125rem', fontWeight: 500, cursor: 'pointer', color: 'text.secondary', transition: 'color 0.15s', '&:hover': { color: 'primary.main' } }}
+              >My Progress</Typography>
+            )}
           </Box>
           <Box sx={{ flexGrow: 1 }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -192,7 +237,7 @@ export default function Layout({ colorMode, onToggleColorMode }) {
         {isMobile ? (
           <Drawer open={mobileOpen} onClose={() => setMobileOpen(false)} sx={mobileDrawerSx}>{drawerContent}</Drawer>
         ) : (
-          <Drawer variant="permanent" sx={{ width: DRAWER_WIDTH, flexShrink: 0, ...permanentDrawerSx }}>{drawerContent}</Drawer>
+          <Drawer variant="permanent" sx={{ width: drawerWidth, flexShrink: 0, ...permanentDrawerSx }}>{drawerContent}</Drawer>
         )}
 
         <Box sx={{ flexGrow: 1, minWidth: 0, p: { xs: 2, md: 3.5 }, maxWidth: 1320, mx: 'auto', width: '100%' }}>

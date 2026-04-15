@@ -1,22 +1,52 @@
-from flask import Blueprint, jsonify
-from flask_jwt_extended import jwt_required
+from flask import Blueprint, jsonify, g
 from sqlalchemy import func
 from app import db
 from app.models import Employee, PerformanceReview, DevelopmentPlan, EmployeeCompetency, TrainingRecord
+from app.access_scope import managed_employee_ids
+from app.rbac import roles_required
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
 
 @dashboard_bp.route("/stats", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def get_stats():
-    total_employees = Employee.query.filter_by(status="active").count()
-    total_reviews = PerformanceReview.query.count()
-    avg_rating = db.session.query(func.avg(PerformanceReview.overall_rating)).scalar() or 0
-    active_plans = DevelopmentPlan.query.filter(DevelopmentPlan.status.in_(["not_started", "in_progress"])).count()
-    training_completed = TrainingRecord.query.filter_by(status="completed").count()
-    high_risk = PerformanceReview.query.filter_by(attrition_risk="high").count()
-    promotion_ready = PerformanceReview.query.filter_by(promotion_ready=True).count()
+    is_manager = g.current_user.role == "manager"
+    team_ids = managed_employee_ids() if is_manager else None
+
+    employees_query = Employee.query.filter_by(status="active")
+    reviews_query = PerformanceReview.query
+    plans_query = DevelopmentPlan.query.filter(DevelopmentPlan.status.in_(["not_started", "in_progress"]))
+    training_query = TrainingRecord.query.filter_by(status="completed")
+    high_risk_query = PerformanceReview.query.filter_by(attrition_risk="high")
+    promotion_ready_query = PerformanceReview.query.filter_by(promotion_ready=True)
+
+    if team_ids is not None:
+        if not team_ids:
+            return jsonify({
+                "total_employees": 0,
+                "total_reviews": 0,
+                "avg_rating": 0,
+                "active_development_plans": 0,
+                "training_completed": 0,
+                "high_attrition_risk": 0,
+                "promotion_ready": 0,
+            })
+
+        employees_query = employees_query.filter(Employee.id.in_(team_ids))
+        reviews_query = reviews_query.filter(PerformanceReview.employee_id.in_(team_ids))
+        plans_query = plans_query.filter(DevelopmentPlan.employee_id.in_(team_ids))
+        training_query = training_query.filter(TrainingRecord.employee_id.in_(team_ids))
+        high_risk_query = high_risk_query.filter(PerformanceReview.employee_id.in_(team_ids))
+        promotion_ready_query = promotion_ready_query.filter(PerformanceReview.employee_id.in_(team_ids))
+
+    total_employees = employees_query.count()
+    total_reviews = reviews_query.count()
+    avg_rating = reviews_query.with_entities(func.avg(PerformanceReview.overall_rating)).scalar() or 0
+    active_plans = plans_query.count()
+    training_completed = training_query.count()
+    high_risk = high_risk_query.count()
+    promotion_ready = promotion_ready_query.count()
 
     return jsonify({
         "total_employees": total_employees,
@@ -30,9 +60,16 @@ def get_stats():
 
 
 @dashboard_bp.route("/employees/promotion-ready", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def promotion_ready_employees():
-    reviews = PerformanceReview.query.filter_by(promotion_ready=True).all()
+    query = PerformanceReview.query.filter_by(promotion_ready=True)
+    if g.current_user.role == "manager":
+        team_ids = managed_employee_ids()
+        if not team_ids:
+            return jsonify([])
+        query = query.filter(PerformanceReview.employee_id.in_(team_ids))
+
+    reviews = query.all()
     seen = {}
     for r in reviews:
         emp = Employee.query.get(r.employee_id)
@@ -42,9 +79,16 @@ def promotion_ready_employees():
 
 
 @dashboard_bp.route("/employees/high-attrition-risk", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def high_attrition_risk_employees():
-    reviews = PerformanceReview.query.filter_by(attrition_risk="high").all()
+    query = PerformanceReview.query.filter_by(attrition_risk="high")
+    if g.current_user.role == "manager":
+        team_ids = managed_employee_ids()
+        if not team_ids:
+            return jsonify([])
+        query = query.filter(PerformanceReview.employee_id.in_(team_ids))
+
+    reviews = query.all()
     seen = {}
     for r in reviews:
         emp = Employee.query.get(r.employee_id)
@@ -54,48 +98,67 @@ def high_attrition_risk_employees():
 
 
 @dashboard_bp.route("/employees/active", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def active_employees():
-    employees = Employee.query.filter_by(status="active").order_by(Employee.last_name).all()
+    query = Employee.query.filter_by(status="active")
+    if g.current_user.role == "manager":
+        team_ids = managed_employee_ids()
+        if not team_ids:
+            return jsonify([])
+        query = query.filter(Employee.id.in_(team_ids))
+
+    employees = query.order_by(Employee.last_name).all()
     return jsonify([e.to_dict() for e in employees])
 
 
 @dashboard_bp.route("/employees/training-completed", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def training_completed_employees():
-    results = (
+    query = (
         db.session.query(
             Employee,
             func.count(TrainingRecord.id).label("completed_count"),
         )
         .join(TrainingRecord, TrainingRecord.employee_id == Employee.id)
         .filter(TrainingRecord.status == "completed")
-        .group_by(Employee.id)
-        .all()
     )
+
+    if g.current_user.role == "manager":
+        team_ids = managed_employee_ids()
+        if not team_ids:
+            return jsonify([])
+        query = query.filter(Employee.id.in_(team_ids))
+
+    results = query.group_by(Employee.id).all()
     return jsonify([{**emp.to_dict(), "completed_trainings": count} for emp, count in results])
 
 
 @dashboard_bp.route("/employees/active-dev-plans", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def active_dev_plan_employees():
-    results = (
+    query = (
         db.session.query(
             Employee,
             func.count(DevelopmentPlan.id).label("plan_count"),
         )
         .join(DevelopmentPlan, DevelopmentPlan.employee_id == Employee.id)
         .filter(DevelopmentPlan.status.in_(["not_started", "in_progress"]))
-        .group_by(Employee.id)
-        .all()
     )
+
+    if g.current_user.role == "manager":
+        team_ids = managed_employee_ids()
+        if not team_ids:
+            return jsonify([])
+        query = query.filter(Employee.id.in_(team_ids))
+
+    results = query.group_by(Employee.id).all()
     return jsonify([{**emp.to_dict(), "active_plans": count} for emp, count in results])
 
 
 @dashboard_bp.route("/team-performance", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def team_performance():
-    results = (
+    query = (
         db.session.query(
             Employee.department,
             func.avg(PerformanceReview.overall_rating).label("avg_rating"),
@@ -111,17 +174,27 @@ def team_performance():
             ).label("avg_goals_detail"),
         )
         .join(PerformanceReview, PerformanceReview.employee_id == Employee.id)
-        .group_by(Employee.department)
-        .all()
     )
+
+    team_ids = None
+    if g.current_user.role == "manager":
+        team_ids = managed_employee_ids()
+        if not team_ids:
+            return jsonify([])
+        query = query.filter(Employee.id.in_(team_ids))
+
+    results = query.group_by(Employee.department).all()
     data = []
     for r in results:
-        training_count = (
+        training_query = (
             db.session.query(func.count(TrainingRecord.id))
             .join(Employee, Employee.id == TrainingRecord.employee_id)
             .filter(Employee.department == r.department, TrainingRecord.status == "completed")
-            .scalar() or 0
         )
+        if team_ids is not None:
+            training_query = training_query.filter(Employee.id.in_(team_ids))
+
+        training_count = training_query.scalar() or 0
         data.append({
             "department": r.department,
             "avg_rating": round(float(r.avg_rating), 2),
@@ -135,33 +208,44 @@ def team_performance():
 
 
 @dashboard_bp.route("/rating-distribution", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def rating_distribution():
-    results = (
+    query = (
         db.session.query(
             func.floor(PerformanceReview.overall_rating).label("rating"),
             func.count().label("count"),
         )
-        .group_by(func.floor(PerformanceReview.overall_rating))
-        .order_by("rating")
-        .all()
     )
+
+    if g.current_user.role == "manager":
+        team_ids = managed_employee_ids()
+        if not team_ids:
+            return jsonify([])
+        query = query.filter(PerformanceReview.employee_id.in_(team_ids))
+
+    results = query.group_by(func.floor(PerformanceReview.overall_rating)).order_by("rating").all()
     return jsonify([{"rating": int(r.rating), "count": r.count} for r in results])
 
 
 @dashboard_bp.route("/department-performance", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def department_performance():
-    results = (
+    query = (
         db.session.query(
             Employee.department,
             func.avg(PerformanceReview.overall_rating).label("avg_rating"),
             func.count(PerformanceReview.id).label("review_count"),
         )
         .join(PerformanceReview, PerformanceReview.employee_id == Employee.id)
-        .group_by(Employee.department)
-        .all()
     )
+
+    if g.current_user.role == "manager":
+        team_ids = managed_employee_ids()
+        if not team_ids:
+            return jsonify([])
+        query = query.filter(Employee.id.in_(team_ids))
+
+    results = query.group_by(Employee.department).all()
     return jsonify([
         {"department": r.department, "avg_rating": round(float(r.avg_rating), 2), "review_count": r.review_count}
         for r in results
@@ -169,13 +253,20 @@ def department_performance():
 
 
 @dashboard_bp.route("/skill-gaps", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def skill_gaps():
-    results = (
+    query = (
         db.session.query(
             EmployeeCompetency,
         )
         .filter(EmployeeCompetency.target_level - EmployeeCompetency.current_level >= 2)
-        .all()
     )
+
+    if g.current_user.role == "manager":
+        team_ids = managed_employee_ids()
+        if not team_ids:
+            return jsonify([])
+        query = query.filter(EmployeeCompetency.employee_id.in_(team_ids))
+
+    results = query.all()
     return jsonify([ec.to_dict() for ec in results])

@@ -1,20 +1,24 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask import Blueprint, request, jsonify, g
 from app import db
 from app.models import PerformanceReview
+from app.access_scope import apply_manager_employee_scope, current_employee, manager_can_access_employee
+from app.rbac import roles_required
 
 reviews_bp = Blueprint("reviews", __name__)
 
 
 @reviews_bp.route("", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def list_reviews():
     employee_id = request.args.get("employee_id", type=int)
     status = request.args.get("status")
     period = request.args.get("period")
 
     query = PerformanceReview.query
+    query = apply_manager_employee_scope(query, PerformanceReview.employee_id)
     if employee_id:
+        if g.current_user.role == "manager" and not manager_can_access_employee(employee_id):
+            return jsonify({"error": "Access denied"}), 403
         query = query.filter_by(employee_id=employee_id)
     if status:
         query = query.filter_by(status=status)
@@ -26,19 +30,32 @@ def list_reviews():
 
 
 @reviews_bp.route("/<int:review_id>", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def get_review(review_id):
     review = PerformanceReview.query.get_or_404(review_id)
+    if g.current_user.role == "manager" and not manager_can_access_employee(review.employee_id):
+        return jsonify({"error": "Access denied"}), 403
+
     return jsonify(review.to_dict())
 
 
 @reviews_bp.route("", methods=["POST"])
-@jwt_required()
+@roles_required("admin", "manager")
 def create_review():
     data = request.get_json()
+    if g.current_user.role == "manager" and not manager_can_access_employee(data["employee_id"]):
+        return jsonify({"error": "Access denied"}), 403
+
+    reviewer_id = data["reviewer_id"]
+    if g.current_user.role == "manager":
+        manager = current_employee()
+        if not manager:
+            return jsonify({"error": "User not found"}), 404
+        reviewer_id = manager.id
+
     review = PerformanceReview(
         employee_id=data["employee_id"],
-        reviewer_id=data["reviewer_id"],
+        reviewer_id=reviewer_id,
         review_period=data["review_period"],
         overall_rating=data["overall_rating"],
         strengths=data.get("strengths"),
@@ -55,9 +72,12 @@ def create_review():
 
 
 @reviews_bp.route("/<int:review_id>", methods=["PUT"])
-@jwt_required()
+@roles_required("admin", "manager")
 def update_review(review_id):
     review = PerformanceReview.query.get_or_404(review_id)
+    if g.current_user.role == "manager" and not manager_can_access_employee(review.employee_id):
+        return jsonify({"error": "Access denied"}), 403
+
     data = request.get_json()
     for field in ["overall_rating", "strengths", "areas_for_improvement", "goals_met",
                    "comments", "status", "promotion_ready", "attrition_risk"]:
@@ -68,9 +88,12 @@ def update_review(review_id):
 
 
 @reviews_bp.route("/<int:review_id>", methods=["DELETE"])
-@jwt_required()
+@roles_required("admin", "manager")
 def delete_review(review_id):
     review = PerformanceReview.query.get_or_404(review_id)
+    if g.current_user.role == "manager" and not manager_can_access_employee(review.employee_id):
+        return jsonify({"error": "Access denied"}), 403
+
     db.session.delete(review)
     db.session.commit()
     return jsonify({"message": "Review deleted"}), 200

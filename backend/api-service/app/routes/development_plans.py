@@ -1,19 +1,23 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask import Blueprint, request, jsonify, g
 from app import db
 from app.models import DevelopmentPlan
+from app.access_scope import apply_manager_employee_scope, manager_can_access_employee
+from app.rbac import roles_required
 
 dev_plans_bp = Blueprint("dev_plans", __name__)
 
 
 @dev_plans_bp.route("", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def list_plans():
     employee_id = request.args.get("employee_id", type=int)
     status = request.args.get("status")
 
     query = DevelopmentPlan.query
+    query = apply_manager_employee_scope(query, DevelopmentPlan.employee_id)
     if employee_id:
+        if g.current_user.role == "manager" and not manager_can_access_employee(employee_id):
+            return jsonify({"error": "Access denied"}), 403
         query = query.filter_by(employee_id=employee_id)
     if status:
         query = query.filter_by(status=status)
@@ -23,16 +27,22 @@ def list_plans():
 
 
 @dev_plans_bp.route("/<int:plan_id>", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def get_plan(plan_id):
     plan = DevelopmentPlan.query.get_or_404(plan_id)
+    if g.current_user.role == "manager" and not manager_can_access_employee(plan.employee_id):
+        return jsonify({"error": "Access denied"}), 403
+
     return jsonify(plan.to_dict())
 
 
 @dev_plans_bp.route("", methods=["POST"])
-@jwt_required()
+@roles_required("admin", "manager")
 def create_plan():
     data = request.get_json()
+    if g.current_user.role == "manager" and not manager_can_access_employee(data["employee_id"]):
+        return jsonify({"error": "Access denied"}), 403
+
     plan = DevelopmentPlan(
         employee_id=data["employee_id"],
         title=data["title"],
@@ -48,9 +58,12 @@ def create_plan():
 
 
 @dev_plans_bp.route("/<int:plan_id>", methods=["PUT"])
-@jwt_required()
+@roles_required("admin", "manager")
 def update_plan(plan_id):
     plan = DevelopmentPlan.query.get_or_404(plan_id)
+    if g.current_user.role == "manager" and not manager_can_access_employee(plan.employee_id):
+        return jsonify({"error": "Access denied"}), 403
+
     data = request.get_json()
     for field in ["title", "description", "goal_type", "target_date", "status", "progress_pct"]:
         if field in data:
@@ -60,9 +73,12 @@ def update_plan(plan_id):
 
 
 @dev_plans_bp.route("/<int:plan_id>", methods=["DELETE"])
-@jwt_required()
+@roles_required("admin", "manager")
 def delete_plan(plan_id):
     plan = DevelopmentPlan.query.get_or_404(plan_id)
+    if g.current_user.role == "manager" and not manager_can_access_employee(plan.employee_id):
+        return jsonify({"error": "Access denied"}), 403
+
     db.session.delete(plan)
     db.session.commit()
     return jsonify({"message": "Development plan deleted"}), 200

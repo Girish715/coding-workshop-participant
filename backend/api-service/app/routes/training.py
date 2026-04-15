@@ -1,19 +1,23 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask import Blueprint, request, jsonify, g
 from app import db
 from app.models import TrainingRecord
+from app.access_scope import apply_manager_employee_scope, manager_can_access_employee
+from app.rbac import roles_required
 
 training_bp = Blueprint("training", __name__)
 
 
 @training_bp.route("", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def list_training():
     employee_id = request.args.get("employee_id", type=int)
     status = request.args.get("status")
 
     query = TrainingRecord.query
+    query = apply_manager_employee_scope(query, TrainingRecord.employee_id)
     if employee_id:
+        if g.current_user.role == "manager" and not manager_can_access_employee(employee_id):
+            return jsonify({"error": "Access denied"}), 403
         query = query.filter_by(employee_id=employee_id)
     if status:
         query = query.filter_by(status=status)
@@ -23,16 +27,22 @@ def list_training():
 
 
 @training_bp.route("/<int:record_id>", methods=["GET"])
-@jwt_required()
+@roles_required("admin", "manager", "employee")
 def get_training(record_id):
     record = TrainingRecord.query.get_or_404(record_id)
+    if g.current_user.role == "manager" and not manager_can_access_employee(record.employee_id):
+        return jsonify({"error": "Access denied"}), 403
+
     return jsonify(record.to_dict())
 
 
 @training_bp.route("", methods=["POST"])
-@jwt_required()
+@roles_required("admin", "manager")
 def create_training():
     data = request.get_json()
+    if g.current_user.role == "manager" and not manager_can_access_employee(data["employee_id"]):
+        return jsonify({"error": "Access denied"}), 403
+
     record = TrainingRecord(
         employee_id=data["employee_id"],
         training_name=data["training_name"],
@@ -50,9 +60,12 @@ def create_training():
 
 
 @training_bp.route("/<int:record_id>", methods=["PUT"])
-@jwt_required()
+@roles_required("admin", "manager")
 def update_training(record_id):
     record = TrainingRecord.query.get_or_404(record_id)
+    if g.current_user.role == "manager" and not manager_can_access_employee(record.employee_id):
+        return jsonify({"error": "Access denied"}), 403
+
     data = request.get_json()
     for field in ["training_name", "provider", "training_type", "start_date",
                    "end_date", "status", "score", "certificate_url"]:
@@ -63,9 +76,12 @@ def update_training(record_id):
 
 
 @training_bp.route("/<int:record_id>", methods=["DELETE"])
-@jwt_required()
+@roles_required("admin", "manager")
 def delete_training(record_id):
     record = TrainingRecord.query.get_or_404(record_id)
+    if g.current_user.role == "manager" and not manager_can_access_employee(record.employee_id):
+        return jsonify({"error": "Access denied"}), 403
+
     db.session.delete(record)
     db.session.commit()
     return jsonify({"message": "Training record deleted"}), 200

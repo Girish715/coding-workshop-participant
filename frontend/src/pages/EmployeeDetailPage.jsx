@@ -4,9 +4,19 @@ import {
   Box, Typography, Card, CardContent, Grid, Chip, Tabs, Tab,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   LinearProgress, CircularProgress, Rating, Avatar, Breadcrumbs, Link, Button,
+  TextField, MenuItem, Alert,
 } from '@mui/material';
 import { ArrowBack } from '@mui/icons-material';
-import { getEmployee, getReviews, getDevPlans, getEmployeeCompetencies, getTraining } from '../services/api.js';
+import {
+  getEmployee,
+  getReviews,
+  getDevPlans,
+  getEmployeeCompetencies,
+  getTraining,
+  updateEmployee,
+  getEmployees,
+} from '../services/api.js';
+import { useAuth } from '../AuthContext.jsx';
 
 const statusCfg = {
   completed: { c: '#16a34a', b: '#f0fdf4' }, in_progress: { c: '#3b82f6', b: '#eff6ff' },
@@ -20,28 +30,146 @@ function TabPanel({ value, index, children }) {
   return value === index ? <Box mt={2}>{children}</Box> : null;
 }
 
-export default function EmployeeDetailPage() {
+export default function EmployeeDetailPage({ employeeIdOverride = null, initialTab = 0 }) {
   const { id } = useParams();
+  const resolvedEmployeeId = employeeIdOverride ?? id;
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [emp, setEmp] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [plans, setPlans] = useState([]);
   const [comps, setComps] = useState([]);
   const [trainings, setTrainings] = useState([]);
-  const [tab, setTab] = useState(0);
+  const [managerOptions, setManagerOptions] = useState([]);
+  const [departmentOptions, setDepartmentOptions] = useState([]);
+  const [editMode, setEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editForm, setEditForm] = useState({
+    first_name: '',
+    last_name: '',
+    employee_code: '',
+    department: 'General',
+    designation: '',
+    status: 'active',
+    hire_date: '',
+    manager_id: '',
+  });
+  const [tab, setTab] = useState(initialTab);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      getEmployee(id),
-      getReviews({ employee_id: id }),
-      getDevPlans({ employee_id: id }),
-      getEmployeeCompetencies({ employee_id: id }),
-      getTraining({ employee_id: id }),
-    ]).then(([e, r, d, c, t]) => {
-      setEmp(e.data); setReviews(r.data); setPlans(d.data); setComps(c.data); setTrainings(t.data);
+    setTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    if (!resolvedEmployeeId) {
+      setLoading(false);
+      return;
+    }
+
+    const baseRequests = [
+      getEmployee(resolvedEmployeeId),
+      getReviews({ employee_id: resolvedEmployeeId }),
+      getDevPlans({ employee_id: resolvedEmployeeId }),
+      getEmployeeCompetencies({ employee_id: resolvedEmployeeId }),
+      getTraining({ employee_id: resolvedEmployeeId }),
+    ];
+
+    if (isAdmin) {
+      baseRequests.push(getEmployees());
+    }
+
+    Promise.all(baseRequests).then((results) => {
+      const [e, r, d, c, t, allEmployeesResponse] = results;
+      setEmp(e.data);
+      setReviews(r.data);
+      setPlans(d.data);
+      setComps(c.data);
+      setTrainings(t.data);
+
+      setEditForm({
+        first_name: e.data.first_name || '',
+        last_name: e.data.last_name || '',
+        employee_code: e.data.employee_code || '',
+        department: e.data.department || 'General',
+        designation: e.data.designation || '',
+        status: e.data.status || 'active',
+        hire_date: e.data.hire_date || '',
+        manager_id: e.data.manager_id ? String(e.data.manager_id) : '',
+      });
+
+      if (isAdmin && allEmployeesResponse?.data) {
+        const allEmployees = allEmployeesResponse.data;
+        const managers = allEmployees
+          .filter((employee) => employee.role === 'manager' && employee.id !== e.data.id)
+          .sort((a, b) => a.full_name.localeCompare(b.full_name));
+        setManagerOptions(managers);
+
+        const defaults = ['Engineering', 'Product', 'Design', 'HR', 'Finance', 'Operations', 'Sales', 'Marketing', 'General'];
+        const existing = allEmployees.map((employee) => employee.department).filter(Boolean);
+        const mergedDepartments = [...new Set([...defaults, ...existing])].sort();
+        setDepartmentOptions(mergedDepartments);
+      }
     }).finally(() => setLoading(false));
-  }, [id]);
+  }, [resolvedEmployeeId]);
+
+  const handleEditChange = (field, value) => {
+    setEditForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleStartEdit = () => {
+    setEditError('');
+    setEditMode(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditError('');
+    setEditForm({
+      first_name: emp.first_name || '',
+      last_name: emp.last_name || '',
+      employee_code: emp.employee_code || '',
+      department: emp.department || 'General',
+      designation: emp.designation || '',
+      status: emp.status || 'active',
+      hire_date: emp.hire_date || '',
+      manager_id: emp.manager_id ? String(emp.manager_id) : '',
+    });
+    setEditMode(false);
+  };
+
+  const handleSaveEdit = async () => {
+    const requiredFields = ['first_name', 'last_name', 'employee_code', 'department', 'designation', 'hire_date'];
+    const missing = requiredFields.find((field) => !editForm[field]?.trim());
+    if (missing) {
+      setEditError('Please fill in all required fields before saving.');
+      return;
+    }
+
+    const payload = {
+      first_name: editForm.first_name.trim(),
+      last_name: editForm.last_name.trim(),
+      employee_code: editForm.employee_code.trim(),
+      department: editForm.department.trim(),
+      designation: editForm.designation.trim(),
+      status: editForm.status,
+      hire_date: editForm.hire_date,
+      manager_id: editForm.manager_id ? Number(editForm.manager_id) : null,
+    };
+
+    setSaving(true);
+    setEditError('');
+    try {
+      const { data } = await updateEmployee(resolvedEmployeeId, payload);
+      setEmp(data);
+      setEditMode(false);
+    } catch (err) {
+      setEditError(err.response?.data?.error || 'Failed to update employee details.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) return <Box display="flex" justifyContent="center" mt={10}><CircularProgress size={28} /></Box>;
   if (!emp) return <Typography>Employee not found.</Typography>;
@@ -83,6 +211,20 @@ export default function EmployeeDetailPage() {
                 {emp.manager_name && <span>Reports to {emp.manager_name}</span>}
               </Box>
             </Box>
+            {isAdmin && (
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {editMode ? (
+                  <>
+                    <Button onClick={handleCancelEdit} disabled={saving}>Cancel</Button>
+                    <Button variant="contained" color="secondary" onClick={handleSaveEdit} disabled={saving}>
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="contained" color="secondary" onClick={handleStartEdit}>Edit Employee</Button>
+                )}
+              </Box>
+            )}
             {latestRating && (
               <Box sx={{ textAlign: 'center' }}>
                 <Typography sx={{ fontSize: '0.6875rem', color: '#9ca3af', textTransform: 'uppercase', fontWeight: 600 }}>Latest rating</Typography>
@@ -93,6 +235,70 @@ export default function EmployeeDetailPage() {
           </Box>
         </CardContent>
       </Card>
+
+      {isAdmin && editMode && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent sx={{ p: 3 }}>
+            <Typography sx={{ fontWeight: 700, mb: 1.5 }}>Edit Employee Details</Typography>
+            {editError && <Alert severity="error" sx={{ mb: 1.5 }}>{editError}</Alert>}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+              <TextField
+                label="First Name" value={editForm.first_name}
+                onChange={(e) => handleEditChange('first_name', e.target.value)}
+                size="small" required
+              />
+              <TextField
+                label="Last Name" value={editForm.last_name}
+                onChange={(e) => handleEditChange('last_name', e.target.value)}
+                size="small" required
+              />
+              <TextField
+                label="Employee Code" value={editForm.employee_code}
+                onChange={(e) => handleEditChange('employee_code', e.target.value)}
+                size="small" required
+              />
+              <TextField
+                select label="Department" value={editForm.department}
+                onChange={(e) => handleEditChange('department', e.target.value)}
+                size="small" required
+              >
+                {departmentOptions.map((department) => (
+                  <MenuItem key={department} value={department}>{department}</MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label="Designation" value={editForm.designation}
+                onChange={(e) => handleEditChange('designation', e.target.value)}
+                size="small" required
+              />
+              <TextField
+                select label="Status" value={editForm.status}
+                onChange={(e) => handleEditChange('status', e.target.value)}
+                size="small"
+              >
+                <MenuItem value="active">Active</MenuItem>
+                <MenuItem value="inactive">Inactive</MenuItem>
+                <MenuItem value="on_leave">On Leave</MenuItem>
+              </TextField>
+              <TextField
+                label="Hire Date" type="date" value={editForm.hire_date}
+                onChange={(e) => handleEditChange('hire_date', e.target.value)}
+                size="small" required InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                select label="Manager" value={editForm.manager_id}
+                onChange={(e) => handleEditChange('manager_id', e.target.value)}
+                size="small"
+              >
+                <MenuItem value="">No Manager</MenuItem>
+                {managerOptions.map((manager) => (
+                  <MenuItem key={manager.id} value={manager.id}>{manager.full_name} ({manager.employee_code})</MenuItem>
+                ))}
+              </TextField>
+            </Box>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} textColor="secondary" indicatorColor="secondary" sx={{
         borderBottom: '1px solid #e2e8f0',

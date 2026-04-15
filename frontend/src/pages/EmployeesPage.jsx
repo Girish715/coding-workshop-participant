@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, TextField, InputAdornment, Chip, Card, Avatar,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TableSortLabel, CircularProgress, MenuItem,
+  TableSortLabel, CircularProgress, MenuItem, Button, Dialog,
+  DialogTitle, DialogContent, DialogActions, Alert,
 } from '@mui/material';
 import { Search } from '@mui/icons-material';
-import { getEmployees } from '../services/api.js';
+import { getEmployees, register } from '../services/api.js';
+import { useAuth } from '../AuthContext.jsx';
 
 const statusCfg = {
   active: {
@@ -33,6 +35,7 @@ const statusCfg = {
 };
 
 export default function EmployeesPage() {
+  const { user } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
@@ -40,15 +43,48 @@ export default function EmployeesPage() {
   const [sortField, setSortField] = useState('full_name');
   const [sortDir, setSortDir] = useState('asc');
   const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createStep, setCreateStep] = useState('role');
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createSuccess, setCreateSuccess] = useState('');
+  const [form, setForm] = useState({
+    role: 'employee',
+    email: '',
+    password: '',
+    first_name: '',
+    last_name: '',
+    employee_code: '',
+    department: 'General',
+    designation: '',
+    hire_date: '',
+    manager_id: '',
+    status: 'active',
+  });
   const navigate = useNavigate();
 
-  useEffect(() => {
+  const isAdmin = user?.role === 'admin';
+
+  const loadEmployees = () => {
+    setLoading(true);
     getEmployees({ search: search || undefined })
       .then(({ data }) => setEmployees(data))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadEmployees();
   }, [search]);
 
   const departments = useMemo(() => [...new Set(employees.map((e) => e.department))].sort(), [employees]);
+  const departmentOptions = useMemo(() => {
+    const defaults = ['Engineering', 'Product', 'Design', 'HR', 'Finance', 'Operations', 'Sales', 'Marketing', 'General'];
+    return [...new Set([...defaults, ...departments])].sort();
+  }, [departments]);
+  const managerCandidates = useMemo(
+    () => employees.filter((e) => e.role === 'manager').sort((a, b) => a.full_name.localeCompare(b.full_name)),
+    [employees],
+  );
 
   const filtered = useMemo(() => {
     let list = [...employees];
@@ -67,6 +103,90 @@ export default function EmployeesPage() {
     setSortField(field);
   };
 
+  const resetCreateForm = () => {
+    setForm({
+      role: 'employee',
+      email: '',
+      password: '',
+      first_name: '',
+      last_name: '',
+      employee_code: '',
+      department: 'General',
+      designation: '',
+      hire_date: '',
+      manager_id: '',
+      status: 'active',
+    });
+    setCreateError('');
+  };
+
+  const handleCreateOpen = () => {
+    resetCreateForm();
+    setCreateStep('role');
+    setCreateSuccess('');
+    setCreateOpen(true);
+  };
+
+  const handleCreateClose = () => {
+    if (createLoading) return;
+    setCreateOpen(false);
+    setCreateStep('role');
+    setCreateError('');
+  };
+
+  const handleFormChange = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleRolePick = (role) => {
+    setForm((prev) => ({
+      ...prev,
+      role,
+      manager_id: role === 'manager' ? '' : prev.manager_id,
+    }));
+    setCreateError('');
+    setCreateStep('details');
+  };
+
+  const handleCreateSubmit = async () => {
+    setCreateError('');
+
+    const requiredFields = ['email', 'password', 'first_name', 'last_name', 'employee_code'];
+    const missingField = requiredFields.find((field) => !form[field]?.trim());
+    if (missingField) {
+      setCreateError('Please fill in all required fields.');
+      return;
+    }
+
+    const payload = {
+      role: form.role,
+      email: form.email.trim(),
+      password: form.password,
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
+      employee_code: form.employee_code.trim(),
+      department: form.department.trim() || 'General',
+      designation: form.designation.trim() || (form.role === 'manager' ? 'Manager' : 'Associate'),
+      hire_date: form.hire_date || undefined,
+      manager_id: form.role === 'employee' && form.manager_id ? Number(form.manager_id) : null,
+      status: form.status,
+    };
+
+    setCreateLoading(true);
+    try {
+      const { data } = await register(payload);
+      setCreateSuccess(`Account created for ${data.employee.full_name}.`);
+      setCreateOpen(false);
+      setCreateStep('role');
+      resetCreateForm();
+      loadEmployees();
+    } catch (err) {
+      setCreateError(err.response?.data?.error || 'Failed to create account.');
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
   const cols = [
     { id: 'full_name', label: 'Name' },
     { id: 'department', label: 'Department' },
@@ -81,8 +201,14 @@ export default function EmployeesPage() {
         <Box>
           <Typography variant="h4">Employees</Typography>
           <Typography sx={{ color: '#6b7280', mt: 0.5 }}>{filtered.length} of {employees.length} people</Typography>
+          {createSuccess && <Alert severity="success" sx={{ mt: 1.25, py: 0.25 }}>{createSuccess}</Alert>}
         </Box>
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+          {isAdmin && (
+            <Button variant="contained" color="secondary" onClick={handleCreateOpen} sx={{ height: 40 }}>
+              Create Account
+            </Button>
+          )}
           <TextField
             placeholder="Search by name or code..."
             size="small"
@@ -169,6 +295,114 @@ export default function EmployeesPage() {
           </TableContainer>
         </Card>
       )}
+
+      <Dialog open={createOpen} onClose={handleCreateClose} maxWidth="sm" fullWidth>
+        <DialogTitle>{createStep === 'role' ? 'Choose Account Type' : `Create ${form.role === 'manager' ? 'Manager' : 'Employee'} Account`}</DialogTitle>
+        <DialogContent>
+          {createStep === 'role' ? (
+            <Box sx={{ mt: 0.5, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+              <Card
+                onClick={() => handleRolePick('manager')}
+                sx={{ p: 2, cursor: 'pointer', border: '1px solid #e5e7eb', '&:hover': { borderColor: '#3b82f6' } }}
+              >
+                <Typography sx={{ fontWeight: 700, mb: 0.5 }}>Manager</Typography>
+                <Typography sx={{ color: '#6b7280', fontSize: '0.875rem' }}>Can oversee direct reports and team progress.</Typography>
+              </Card>
+              <Card
+                onClick={() => handleRolePick('employee')}
+                sx={{ p: 2, cursor: 'pointer', border: '1px solid #e5e7eb', '&:hover': { borderColor: '#3b82f6' } }}
+              >
+                <Typography sx={{ fontWeight: 700, mb: 0.5 }}>Employee</Typography>
+                <Typography sx={{ color: '#6b7280', fontSize: '0.875rem' }}>Can access personal goals, plans, and progress only.</Typography>
+              </Card>
+            </Box>
+          ) : (
+            <Box sx={{ mt: 0.5, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+              {createError && <Alert severity="error" sx={{ gridColumn: '1 / -1' }}>{createError}</Alert>}
+              <TextField
+                select label="Status" value={form.status}
+                onChange={(e) => handleFormChange('status', e.target.value)}
+                size="small"
+              >
+                <MenuItem value="active">Active</MenuItem>
+                <MenuItem value="inactive">Inactive</MenuItem>
+                <MenuItem value="on_leave">On Leave</MenuItem>
+              </TextField>
+              <TextField
+                label="First Name" value={form.first_name}
+                onChange={(e) => handleFormChange('first_name', e.target.value)}
+                size="small" required
+              />
+              <TextField
+                label="Last Name" value={form.last_name}
+                onChange={(e) => handleFormChange('last_name', e.target.value)}
+                size="small" required
+              />
+              <TextField
+                label="Email" type="email" value={form.email}
+                onChange={(e) => handleFormChange('email', e.target.value)}
+                size="small" required
+              />
+              <TextField
+                label="Password" type="password" value={form.password}
+                onChange={(e) => handleFormChange('password', e.target.value)}
+                size="small" required
+              />
+              <TextField
+                label="Employee Code" value={form.employee_code}
+                onChange={(e) => handleFormChange('employee_code', e.target.value)}
+                size="small" required
+              />
+              <TextField
+                select label="Department" value={form.department}
+                onChange={(e) => handleFormChange('department', e.target.value)}
+                size="small"
+              >
+                {departmentOptions.map((department) => (
+                  <MenuItem key={department} value={department}>{department}</MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label="Designation" value={form.designation}
+                onChange={(e) => handleFormChange('designation', e.target.value)}
+                size="small"
+                helperText={form.role === 'manager' ? 'Defaults to Manager if left blank.' : 'Defaults to Associate if left blank.'}
+              />
+              <TextField
+                label="Hire Date" type="date" value={form.hire_date}
+                onChange={(e) => handleFormChange('hire_date', e.target.value)}
+                size="small" InputLabelProps={{ shrink: true }}
+              />
+              {form.role === 'employee' && (
+                <TextField
+                  select label="Manager" value={form.manager_id}
+                  onChange={(e) => handleFormChange('manager_id', e.target.value)}
+                  size="small"
+                  helperText={managerCandidates.length === 0 ? 'No managers found yet.' : ''}
+                >
+                  <MenuItem value="">No Manager</MenuItem>
+                  {managerCandidates.map((manager) => (
+                    <MenuItem key={manager.id} value={manager.id}>{manager.full_name} ({manager.employee_code})</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          {createStep === 'role' ? (
+            <Button onClick={handleCreateClose} disabled={createLoading}>Cancel</Button>
+          ) : (
+            <>
+              <Button onClick={() => setCreateStep('role')} disabled={createLoading}>Back</Button>
+              <Button onClick={handleCreateClose} disabled={createLoading}>Cancel</Button>
+              <Button variant="contained" color="secondary" onClick={handleCreateSubmit} disabled={createLoading}>
+                {createLoading ? 'Creating...' : `Create ${form.role === 'manager' ? 'Manager' : 'Employee'}`}
+              </Button>
+            </>
+          )}
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

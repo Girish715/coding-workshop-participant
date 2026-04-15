@@ -18,6 +18,7 @@ import {
   getDashboardStats, getRatingDistribution, getDeptPerformance,
   getPromotionReadyEmployees, getHighAttritionRiskEmployees, getActiveEmployees,
   getTrainingCompletedEmployees, getActiveDevPlanEmployees, getTeamPerformance,
+  getReviews, getDevPlans, getEmployeeCompetencies, getTraining,
 } from '../services/api.js';
 import { useAuth } from '../AuthContext.jsx';
 
@@ -34,7 +35,8 @@ const EMPTY_STATS = {
 };
 
 export default function DashboardPage() {
-  const { employee } = useAuth();
+  const { user, employee } = useAuth();
+  const isEmployeeRole = user?.role === 'employee';
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const tooltipStyle = {
@@ -61,8 +63,29 @@ export default function DashboardPage() {
   const [drillStatusFilter, setDrillStatusFilter] = useState('');
   const [drillSortField, setDrillSortField] = useState('full_name');
   const [drillSortDir, setDrillSortDir] = useState('asc');
+  const [myReviews, setMyReviews] = useState([]);
+  const [myPlans, setMyPlans] = useState([]);
+  const [myCompetencies, setMyCompetencies] = useState([]);
+  const [myTraining, setMyTraining] = useState([]);
 
   useEffect(() => {
+    if (isEmployeeRole && employee?.id) {
+      Promise.all([
+        getReviews({ employee_id: employee.id }),
+        getDevPlans({ employee_id: employee.id }),
+        getEmployeeCompetencies({ employee_id: employee.id }),
+        getTraining({ employee_id: employee.id }),
+      ])
+        .then(([reviewsRes, plansRes, competenciesRes, trainingRes]) => {
+          setMyReviews(reviewsRes.data || []);
+          setMyPlans(plansRes.data || []);
+          setMyCompetencies(competenciesRes.data || []);
+          setMyTraining(trainingRes.data || []);
+        })
+        .finally(() => setLoading(false));
+      return;
+    }
+
     Promise.all([getDashboardStats(), getRatingDistribution(), getDeptPerformance(), getTeamPerformance()])
       .then(([s, r, d, t]) => {
         setStats(s.data || EMPTY_STATS);
@@ -77,7 +100,7 @@ export default function DashboardPage() {
         setTeamPerf([]);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [isEmployeeRole, employee?.id]);
 
   const openDrill = async (title, fetcher, cols) => {
     setDrillTitle(title);
@@ -156,6 +179,190 @@ export default function DashboardPage() {
   };
 
   if (loading) return <Box display="flex" justifyContent="center" mt={10}><CircularProgress size={32} /></Box>;
+
+  if (isEmployeeRole) {
+    const avgRating = myReviews.length
+      ? (myReviews.reduce((total, review) => total + (review.overall_rating || 0), 0) / myReviews.length).toFixed(2)
+      : '0.00';
+    const completedTraining = myTraining.filter((training) => training.status === 'completed').length;
+    const activePlans = myPlans.filter((plan) => ['not_started', 'in_progress'].includes(plan.status)).length;
+    const atRiskCount = myReviews.filter((review) => review.attrition_risk === 'high').length;
+    const promotionReadyCount = myReviews.filter((review) => review.promotion_ready).length;
+    const competencyCoverage = myCompetencies.length
+      ? Math.round(
+        myCompetencies.reduce((total, competency) => {
+          const target = competency.target_level || 1;
+          return total + Math.min(100, Math.round(((competency.current_level || 0) / target) * 100));
+        }, 0) / myCompetencies.length,
+      )
+      : 0;
+
+    return (
+      <Box>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h4">My Progress</Typography>
+          <Typography sx={{ color: '#64748b', mt: 0.5 }}>
+            A focused view of your own development journey, goals, and outcomes.
+          </Typography>
+        </Box>
+
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          {[
+            { label: 'Average Rating', value: avgRating, icon: <Star />, color: '#f59e0b', bg: '#fffbeb' },
+            { label: 'Reviews', value: myReviews.length, icon: <RateReview />, color: '#8b5cf6', bg: '#f5f3ff' },
+            { label: 'Active Plans', value: activePlans, icon: <TrendingUp />, color: '#14b8a6', bg: '#f0fdfa' },
+            { label: 'Completed Training', value: completedTraining, icon: <School />, color: '#0ea5e9', bg: '#f0f9ff' },
+            { label: 'Promotion Ready Flags', value: promotionReadyCount, icon: <CheckCircle />, color: '#10b981', bg: '#ecfdf5' },
+            { label: 'High Attrition Risk Flags', value: atRiskCount, icon: <Warning />, color: '#ef4444', bg: '#fef2f2' },
+          ].map((tile) => (
+            <Grid item xs={6} md={4} lg={2} key={tile.label}>
+              <Card sx={{ height: '100%' }}>
+                <CardContent sx={{ p: 2.5 }}>
+                  <Box sx={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 2.5,
+                    bgcolor: isDark ? 'rgba(255, 122, 26, 0.2)' : tile.bg,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isDark ? '#ffbf87' : tile.color,
+                    mb: 1.25,
+                  }}>
+                    {tile.icon}
+                  </Box>
+                  <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, lineHeight: 1.1 }}>{tile.value}</Typography>
+                  <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', mt: 0.4 }}>{tile.label}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={7}>
+            <Card sx={{ mb: 2 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ mb: 0.25 }}>Competency Coverage</Typography>
+                <Typography sx={{ fontSize: '0.8125rem', color: '#94a3b8', mb: 1.75 }}>
+                  Your current proficiency against target levels.
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
+                  <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>Overall target progress</Typography>
+                  <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700 }}>{competencyCoverage}%</Typography>
+                </Box>
+                <Box sx={{
+                  width: '100%',
+                  height: 8,
+                  borderRadius: 999,
+                  bgcolor: isDark ? '#2b2016' : '#f1f5f9',
+                  overflow: 'hidden',
+                }}>
+                  <Box sx={{
+                    width: `${competencyCoverage}%`,
+                    height: '100%',
+                    bgcolor: competencyCoverage >= 70 ? '#10b981' : competencyCoverage >= 40 ? '#f59e0b' : '#ef4444',
+                  }} />
+                </Box>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ mb: 0.25 }}>Recent Review Timeline</Typography>
+                <Typography sx={{ fontSize: '0.8125rem', color: '#94a3b8', mb: 2 }}>
+                  Your latest review outcomes and periods.
+                </Typography>
+                {myReviews.length === 0 ? (
+                  <Typography sx={{ color: '#94a3b8' }}>No reviews available yet.</Typography>
+                ) : (
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Period</TableCell>
+                          <TableCell>Rating</TableCell>
+                          <TableCell>Status</TableCell>
+                          <TableCell>Risk</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {myReviews.slice(0, 5).map((review) => (
+                          <TableRow key={review.id}>
+                            <TableCell>{review.review_period}</TableCell>
+                            <TableCell>{review.overall_rating}</TableCell>
+                            <TableCell sx={{ textTransform: 'capitalize' }}>{review.status}</TableCell>
+                            <TableCell sx={{ textTransform: 'capitalize' }}>{review.attrition_risk}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} md={5}>
+            <Card sx={{ mb: 2 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ mb: 0.25 }}>Development Plans</Typography>
+                <Typography sx={{ fontSize: '0.8125rem', color: '#94a3b8', mb: 2 }}>
+                  Plans currently shaping your growth.
+                </Typography>
+                {myPlans.length === 0 ? (
+                  <Typography sx={{ color: '#94a3b8' }}>No development plans available.</Typography>
+                ) : (
+                  <Box sx={{ display: 'grid', gap: 1.2 }}>
+                    {myPlans.slice(0, 4).map((plan) => (
+                      <Box key={plan.id} sx={{ p: 1.2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                        <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700 }}>{plan.title}</Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', textTransform: 'capitalize' }}>
+                          {plan.status.replace('_', ' ')} • {plan.progress_pct}% complete
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ mb: 0.25 }}>Training Journey</Typography>
+                <Typography sx={{ fontSize: '0.8125rem', color: '#94a3b8', mb: 2 }}>
+                  Your most recent learning activity.
+                </Typography>
+                {myTraining.length === 0 ? (
+                  <Typography sx={{ color: '#94a3b8' }}>No training records available.</Typography>
+                ) : (
+                  <Box sx={{ display: 'grid', gap: 1.2 }}>
+                    {myTraining.slice(0, 4).map((training) => (
+                      <Box key={training.id} sx={{ p: 1.2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                        <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700 }}>{training.training_name}</Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', textTransform: 'capitalize' }}>
+                          {training.status.replace('_', ' ')} • {training.provider || 'Internal'}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+                {employee?.id && (
+                  <Button
+                    size="small"
+                    sx={{ mt: 2, textTransform: 'none', fontWeight: 600 }}
+                    onClick={() => navigate(`/employees/${employee.id}`)}
+                  >
+                    Open full profile
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </Box>
+    );
+  }
 
   const tiles = [
     {

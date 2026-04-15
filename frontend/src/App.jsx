@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { AuthProvider, useAuth } from './AuthContext.jsx';
 import Layout from './components/Layout.jsx';
@@ -195,20 +195,55 @@ function PrivateRoute({ children }) {
   return user ? children : <Navigate to="/login" />;
 }
 
+function ManagerRoute({ children }) {
+  const { user, employee, loading } = useAuth();
+  if (loading) return <FullPageLoader />;
+  if (!user) return <Navigate to="/login" />;
+  if (user.role === 'employee') {
+    const fallbackId = employee?.id;
+    return fallbackId ? <Navigate to={`/employees/${fallbackId}`} replace /> : <Navigate to="/" replace />;
+  }
+  return children;
+}
+
+function EmployeeDetailRoute({ children }) {
+  const { user, employee, loading } = useAuth();
+  const { id } = useParams();
+  if (loading) return <FullPageLoader />;
+  if (!user) return <Navigate to="/login" />;
+  if (user.role === 'employee' && employee?.id && Number(id) !== Number(employee.id)) {
+    return <Navigate to={`/employees/${employee.id}`} replace />;
+  }
+  return children;
+}
+
+function EmployeeOnlyRoute({ children }) {
+  const { user, employee, loading } = useAuth();
+  if (loading) return <FullPageLoader />;
+  if (!user) return <Navigate to="/login" />;
+  if (user.role !== 'employee') return <Navigate to="/" replace />;
+  return employee?.id ? children : <Navigate to="/" replace />;
+}
+
 function AppRoutes({ colorMode, onToggleColorMode }) {
-  const { user, loading } = useAuth();
+  const { user, employee, loading } = useAuth();
   if (loading) return <FullPageLoader />;
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
       <Route path="/" element={<PrivateRoute><Layout colorMode={colorMode} onToggleColorMode={onToggleColorMode} /></PrivateRoute>}>
         <Route index element={<DashboardPage />} />
-        <Route path="employees" element={<EmployeesPage />} />
-        <Route path="employees/:id" element={<EmployeeDetailPage />} />
-        <Route path="reviews" element={<ReviewsPage />} />
-        <Route path="development-plans" element={<DevPlansPage />} />
-        <Route path="competencies" element={<CompetenciesPage />} />
-        <Route path="training" element={<TrainingPage />} />
+        <Route path="employees" element={<ManagerRoute><EmployeesPage /></ManagerRoute>} />
+        <Route path="employees/:id" element={<EmployeeDetailRoute><EmployeeDetailPage /></EmployeeDetailRoute>} />
+        <Route path="my-progress/profile" element={<EmployeeOnlyRoute><EmployeeDetailPage employeeIdOverride={employee?.id} /></EmployeeOnlyRoute>} />
+        <Route path="my-progress/reviews" element={<EmployeeOnlyRoute><EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={0} /></EmployeeOnlyRoute>} />
+        <Route path="my-progress/development-plans" element={<EmployeeOnlyRoute><EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={1} /></EmployeeOnlyRoute>} />
+        <Route path="my-progress/competencies" element={<EmployeeOnlyRoute><EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={2} /></EmployeeOnlyRoute>} />
+        <Route path="my-progress/training" element={<EmployeeOnlyRoute><EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={3} /></EmployeeOnlyRoute>} />
+        <Route path="reviews" element={<ManagerRoute><ReviewsPage /></ManagerRoute>} />
+        <Route path="development-plans" element={<ManagerRoute><DevPlansPage /></ManagerRoute>} />
+        <Route path="competencies" element={<ManagerRoute><CompetenciesPage /></ManagerRoute>} />
+        <Route path="training" element={<ManagerRoute><TrainingPage /></ManagerRoute>} />
       </Route>
     </Routes>
   );
