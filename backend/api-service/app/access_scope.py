@@ -5,7 +5,7 @@ from typing import Any, Set
 from flask import g
 from sqlalchemy import false
 
-from app.models import Employee
+from app.models import Employee, User
 
 
 def current_employee() -> Employee | None:
@@ -18,7 +18,7 @@ def current_employee() -> Employee | None:
 
 
 def managed_employee_ids() -> Set[int]:
-    """Return direct report IDs for the authenticated manager."""
+    """Return direct employee-report IDs for the authenticated manager."""
 
     user = getattr(g, "current_user", None)
     if not user or user.role != "manager":
@@ -28,7 +28,12 @@ def managed_employee_ids() -> Set[int]:
     if not manager:
         return set()
 
-    rows = Employee.query.with_entities(Employee.id).filter_by(manager_id=manager.id).all()
+    rows = (
+        Employee.query.with_entities(Employee.id)
+        .join(User, User.id == Employee.user_id)
+        .filter(Employee.manager_id == manager.id, User.role == "employee")
+        .all()
+    )
     return {row[0] for row in rows}
 
 

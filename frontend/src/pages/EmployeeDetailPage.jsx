@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Card, CardContent, Grid, Chip, Tabs, Tab,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   LinearProgress, CircularProgress, Rating, Avatar, Breadcrumbs, Link, Button,
-  TextField, MenuItem, Alert,
+  TextField, MenuItem, Alert, Autocomplete,
 } from '@mui/material';
 import { ArrowBack } from '@mui/icons-material';
 import {
@@ -58,6 +58,13 @@ export default function EmployeeDetailPage({ employeeIdOverride = null, initialT
   });
   const [tab, setTab] = useState(initialTab);
   const [loading, setLoading] = useState(true);
+  const managerDropdownOptions = useMemo(
+    () => [{ id: '', full_name: 'No Manager', employee_code: '' }, ...managerOptions],
+    [managerOptions],
+  );
+  const selectedManagerOption = managerDropdownOptions.find(
+    (manager) => String(manager.id) === String(editForm.manager_id),
+  ) || null;
 
   useEffect(() => {
     setTab(initialTab);
@@ -285,16 +292,36 @@ export default function EmployeeDetailPage({ employeeIdOverride = null, initialT
                 onChange={(e) => handleEditChange('hire_date', e.target.value)}
                 size="small" required InputLabelProps={{ shrink: true }}
               />
-              <TextField
-                select label="Manager" value={editForm.manager_id}
-                onChange={(e) => handleEditChange('manager_id', e.target.value)}
-                size="small"
-              >
-                <MenuItem value="">No Manager</MenuItem>
-                {managerOptions.map((manager) => (
-                  <MenuItem key={manager.id} value={manager.id}>{manager.full_name} ({manager.employee_code})</MenuItem>
-                ))}
-              </TextField>
+              <Autocomplete
+                options={managerDropdownOptions}
+                value={selectedManagerOption}
+                onChange={(_, value) => handleEditChange('manager_id', value ? String(value.id) : '')}
+                getOptionLabel={(option) => (option.employee_code ? `${option.full_name} (${option.employee_code})` : option.full_name)}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                noOptionsText="No managers found"
+                openOnFocus
+                autoHighlight
+                clearOnEscape
+                sx={{ gridColumn: { xs: '1 / -1', sm: '1 / -1' } }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Manager"
+                    size="small"
+                    placeholder="Search manager by name or code"
+                    helperText={managerOptions.length === 0 ? 'No managers found yet.' : 'Search and select from dropdown'}
+                  />
+                )}
+                filterOptions={(options, { inputValue }) => {
+                  const query = inputValue.trim().toLowerCase();
+                  if (!query) return options;
+                  return options.filter((option) => {
+                    const fullName = option.full_name?.toLowerCase() || '';
+                    const employeeCode = option.employee_code?.toLowerCase() || '';
+                    return fullName.includes(query) || employeeCode.includes(query);
+                  });
+                }}
+              />
             </Box>
           </CardContent>
         </Card>

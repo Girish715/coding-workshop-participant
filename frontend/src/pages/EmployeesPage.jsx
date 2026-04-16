@@ -4,7 +4,7 @@ import {
   Box, Typography, TextField, InputAdornment, Chip, Card, Avatar,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TableSortLabel, CircularProgress, MenuItem, Button, Dialog,
-  DialogTitle, DialogContent, DialogActions, Alert,
+  DialogTitle, DialogContent, DialogActions, Alert, Autocomplete,
 } from '@mui/material';
 import { Search } from '@mui/icons-material';
 import { getEmployees, register } from '../services/api.js';
@@ -37,6 +37,7 @@ const statusCfg = {
 export default function EmployeesPage() {
   const { user } = useAuth();
   const [employees, setEmployees] = useState([]);
+  const [createEmployeePool, setCreateEmployeePool] = useState([]);
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -46,6 +47,7 @@ export default function EmployeesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createStep, setCreateStep] = useState('role');
   const [createLoading, setCreateLoading] = useState(false);
+  const [managerLookupLoading, setManagerLookupLoading] = useState(false);
   const [createError, setCreateError] = useState('');
   const [createSuccess, setCreateSuccess] = useState('');
   const [form, setForm] = useState({
@@ -81,9 +83,18 @@ export default function EmployeesPage() {
     const defaults = ['Engineering', 'Product', 'Design', 'HR', 'Finance', 'Operations', 'Sales', 'Marketing', 'General'];
     return [...new Set([...defaults, ...departments])].sort();
   }, [departments]);
-  const managerCandidates = useMemo(
-    () => employees.filter((e) => e.role === 'manager').sort((a, b) => a.full_name.localeCompare(b.full_name)),
-    [employees],
+  const managerCandidates = useMemo(() => {
+    return createEmployeePool
+      .filter((e) => e.role === 'manager')
+      .sort((a, b) => a.full_name.localeCompare(b.full_name));
+  }, [createEmployeePool]);
+  const managerDropdownOptions = useMemo(
+    () => [{ id: '', full_name: 'No Manager', employee_code: '' }, ...managerCandidates],
+    [managerCandidates],
+  );
+  const selectedManager = useMemo(
+    () => managerDropdownOptions.find((manager) => String(manager.id) === String(form.manager_id)) || null,
+    [managerDropdownOptions, form.manager_id],
   );
 
   const filtered = useMemo(() => {
@@ -125,6 +136,13 @@ export default function EmployeesPage() {
     setCreateStep('role');
     setCreateSuccess('');
     setCreateOpen(true);
+    if (isAdmin) {
+      setManagerLookupLoading(true);
+      getEmployees()
+        .then(({ data }) => setCreateEmployeePool(data))
+        .catch(() => setCreateEmployeePool([]))
+        .finally(() => setManagerLookupLoading(false));
+    }
   };
 
   const handleCreateClose = () => {
@@ -374,17 +392,36 @@ export default function EmployeesPage() {
                 size="small" InputLabelProps={{ shrink: true }}
               />
               {form.role === 'employee' && (
-                <TextField
-                  select label="Manager" value={form.manager_id}
-                  onChange={(e) => handleFormChange('manager_id', e.target.value)}
-                  size="small"
-                  helperText={managerCandidates.length === 0 ? 'No managers found yet.' : ''}
-                >
-                  <MenuItem value="">No Manager</MenuItem>
-                  {managerCandidates.map((manager) => (
-                    <MenuItem key={manager.id} value={manager.id}>{manager.full_name} ({manager.employee_code})</MenuItem>
-                  ))}
-                </TextField>
+                <Autocomplete
+                  options={managerDropdownOptions}
+                  value={selectedManager}
+                  onChange={(_, value) => handleFormChange('manager_id', value ? String(value.id) : '')}
+                  getOptionLabel={(option) => (option.employee_code ? `${option.full_name} (${option.employee_code})` : option.full_name)}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  noOptionsText="No managers found"
+                  openOnFocus
+                  autoHighlight
+                  clearOnEscape
+                  sx={{ gridColumn: { xs: '1 / -1', sm: '1 / -1' } }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Manager"
+                      size="small"
+                      placeholder="Search manager by name or code"
+                      helperText={managerLookupLoading ? 'Loading managers...' : managerCandidates.length === 0 ? 'No managers found yet.' : 'Search and select from dropdown'}
+                    />
+                  )}
+                  filterOptions={(options, { inputValue }) => {
+                    const query = inputValue.trim().toLowerCase();
+                    if (!query) return options;
+                    return options.filter((option) => {
+                      const fullName = option.full_name?.toLowerCase() || '';
+                      const employeeCode = option.employee_code?.toLowerCase() || '';
+                      return fullName.includes(query) || employeeCode.includes(query);
+                    });
+                  }}
+                />
               )}
             </Box>
           )}

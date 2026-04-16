@@ -10,6 +10,8 @@ auth_bp = Blueprint("auth", __name__)
 @auth_bp.route("/register", methods=["POST"])
 @roles_required("admin")
 def register():
+    """Create a new user and employee profile (admin only)."""
+
     data = request.get_json() or {}
     valid_statuses = {"active", "inactive", "on_leave"}
 
@@ -34,6 +36,10 @@ def register():
     db.session.add(user)
     db.session.flush()
 
+    manager_id = data.get("manager_id")
+    if requested_role == "manager":
+        manager_id = None
+
     employee = Employee(
         user_id=user.id,
         first_name=data["first_name"],
@@ -42,7 +48,7 @@ def register():
         department=data.get("department", "General"),
         designation=data.get("designation", "Associate"),
         hire_date=data.get("hire_date", "2025-01-01"),
-        manager_id=data.get("manager_id"),
+        manager_id=manager_id,
         status=requested_status,
     )
     db.session.add(employee)

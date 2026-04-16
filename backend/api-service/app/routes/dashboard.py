@@ -43,10 +43,10 @@ def get_stats():
     total_employees = employees_query.count()
     total_reviews = reviews_query.count()
     avg_rating = reviews_query.with_entities(func.avg(PerformanceReview.overall_rating)).scalar() or 0
-    active_plans = plans_query.count()
-    training_completed = training_query.count()
-    high_risk = high_risk_query.count()
-    promotion_ready = promotion_ready_query.count()
+    active_plans = plans_query.with_entities(DevelopmentPlan.employee_id).distinct().count()
+    training_completed = training_query.with_entities(TrainingRecord.employee_id).distinct().count()
+    high_risk = high_risk_query.with_entities(PerformanceReview.employee_id).distinct().count()
+    promotion_ready = promotion_ready_query.with_entities(PerformanceReview.employee_id).distinct().count()
 
     return jsonify({
         "total_employees": total_employees,
@@ -173,7 +173,7 @@ def team_performance():
                 )
             ).label("avg_goals_detail"),
         )
-        .join(PerformanceReview, PerformanceReview.employee_id == Employee.id)
+        .outerjoin(PerformanceReview, PerformanceReview.employee_id == Employee.id)
     )
 
     team_ids = None
@@ -197,7 +197,7 @@ def team_performance():
         training_count = training_query.scalar() or 0
         data.append({
             "department": r.department,
-            "avg_rating": round(float(r.avg_rating), 2),
+            "avg_rating": round(float(r.avg_rating), 2) if r.avg_rating is not None else 0,
             "employee_count": r.employee_count,
             "review_count": r.review_count,
             "promotion_ready": int(r.promotion_ready or 0),

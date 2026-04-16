@@ -57,6 +57,8 @@ def get_employee(emp_id):
 @employees_bp.route("/<int:emp_id>", methods=["PUT"])
 @roles_required("admin", "manager")
 def update_employee(emp_id):
+    """Update employee details with access-scope and field validation."""
+
     if g.current_user.role == "manager" and not manager_can_access_employee(emp_id):
         return jsonify({"error": "Access denied"}), 403
 
@@ -103,6 +105,10 @@ def update_employee(emp_id):
     ]:
         if field in data:
             setattr(emp, field, data[field])
+
+    # Managers cannot report to anyone.
+    if emp.user and emp.user.role == "manager":
+        emp.manager_id = None
 
     db.session.commit()
     return jsonify(emp.to_dict())
