@@ -8,7 +8,7 @@ from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 
 from app.models import User
 
-VALID_ROLES = {"admin", "manager", "employee"}
+VALID_ROLES = {"admin", "hr", "manager", "employee"}
 
 
 def roles_required(*allowed_roles: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:

@@ -1,10 +1,13 @@
 from datetime import date
 
 from flask import Blueprint, request, jsonify, g
+from sqlalchemy.orm import joinedload
 from app import db
 from app.models import Employee
 from app.access_scope import apply_manager_employee_scope, manager_can_access_employee
 from app.rbac import roles_required
+from app.cache import cached, invalidate
+from app.notifications import notify_employee_status_change
 
 employees_bp = Blueprint("employees", __name__)
 
@@ -19,13 +22,14 @@ def _parse_hire_date(value: str) -> date | None:
 
 
 @employees_bp.route("", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("employees")
 def list_employees():
     department = request.args.get("department")
     status = request.args.get("status")
     search = request.args.get("search")
 
-    query = Employee.query
+    query = Employee.query.options(joinedload(Employee.user), joinedload(Employee.manager))
     query = apply_manager_employee_scope(query, Employee.id)
     if department:
         query = query.filter_by(department=department)
@@ -45,17 +49,18 @@ def list_employees():
 
 
 @employees_bp.route("/<int:emp_id>", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("employees")
 def get_employee(emp_id):
     if g.current_user.role == "manager" and not manager_can_access_employee(emp_id):
         return jsonify({"error": "Access denied"}), 403
 
-    emp = Employee.query.get_or_404(emp_id)
+    emp = Employee.query.options(joinedload(Employee.user), joinedload(Employee.manager)).get_or_404(emp_id)
     return jsonify(emp.to_dict())
 
 
 @employees_bp.route("/<int:emp_id>", methods=["PUT"])
-@roles_required("admin", "manager")
+@roles_required("admin", "hr", "manager")
 def update_employee(emp_id):
     """Update employee details with access-scope and field validation."""
 
@@ -64,6 +69,7 @@ def update_employee(emp_id):
 
     emp = Employee.query.get_or_404(emp_id)
     data = request.get_json() or {}
+    old_status = emp.status
 
     valid_statuses = {"active", "inactive", "on_leave"}
     if "status" in data and data["status"] not in valid_statuses:
@@ -111,11 +117,16 @@ def update_employee(emp_id):
         emp.manager_id = None
 
     db.session.commit()
+    invalidate("employees", "dashboard")
+    if "status" in data and data["status"] != old_status:
+        notify_employee_status_change(emp, old_status, data["status"])
+        db.session.commit()
     return jsonify(emp.to_dict())
 
 
 @employees_bp.route("/departments", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("employees")
 def list_departments():
     query = Employee.query
     query = apply_manager_employee_scope(query, Employee.id)

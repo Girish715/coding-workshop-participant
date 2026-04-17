@@ -28,6 +28,14 @@ def handler(event=None, context=None):
         rc = event.get("requestContext", {}).get("http", {})
         method = rc.get("method", "GET")
         path = rc.get("path", "/")
+
+        # CloudFront forwards /api/api-service/* to this function unchanged.
+        # Normalize that prefix back to /api/* so Flask routes continue to match.
+        if path == "/api/api-service":
+            path = "/api"
+        elif path.startswith("/api/api-service/"):
+            path = "/api/" + path[len("/api/api-service/"):]
+
         headers = event.get("headers", {})
         qs = event.get("queryStringParameters") or {}
         raw_body = event.get("body", "") or ""

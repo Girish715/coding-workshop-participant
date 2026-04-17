@@ -35,7 +35,7 @@ export default function EmployeeDetailPage({ employeeIdOverride = null, initialT
   const resolvedEmployeeId = employeeIdOverride ?? id;
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const canEditEmployee = ['admin', 'hr'].includes(user?.role || '');
   const [emp, setEmp] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -84,7 +84,7 @@ export default function EmployeeDetailPage({ employeeIdOverride = null, initialT
       getTraining({ employee_id: resolvedEmployeeId }),
     ];
 
-    if (isAdmin) {
+    if (canEditEmployee) {
       baseRequests.push(getEmployees());
     }
 
@@ -107,7 +107,7 @@ export default function EmployeeDetailPage({ employeeIdOverride = null, initialT
         manager_id: e.data.manager_id ? String(e.data.manager_id) : '',
       });
 
-      if (isAdmin && allEmployeesResponse?.data) {
+      if (canEditEmployee && allEmployeesResponse?.data) {
         const allEmployees = allEmployeesResponse.data;
         const managers = allEmployees
           .filter((employee) => employee.role === 'manager' && employee.id !== e.data.id)
@@ -120,7 +120,7 @@ export default function EmployeeDetailPage({ employeeIdOverride = null, initialT
         setDepartmentOptions(mergedDepartments);
       }
     }).finally(() => setLoading(false));
-  }, [resolvedEmployeeId]);
+  }, [resolvedEmployeeId, canEditEmployee]);
 
   const handleEditChange = (field, value) => {
     setEditForm((prev) => ({ ...prev, [field]: value }));
@@ -218,7 +218,7 @@ export default function EmployeeDetailPage({ employeeIdOverride = null, initialT
                 {emp.manager_name && <span>Reports to {emp.manager_name}</span>}
               </Box>
             </Box>
-            {isAdmin && (
+            {canEditEmployee && (
               <Box sx={{ display: 'flex', gap: 1 }}>
                 {editMode ? (
                   <>
@@ -243,7 +243,7 @@ export default function EmployeeDetailPage({ employeeIdOverride = null, initialT
         </CardContent>
       </Card>
 
-      {isAdmin && editMode && (
+      {canEditEmployee && editMode && (
         <Card sx={{ mb: 3 }}>
           <CardContent sx={{ p: 3 }}>
             <Typography sx={{ fontWeight: 700, mb: 1.5 }}>Edit Employee Details</Typography>

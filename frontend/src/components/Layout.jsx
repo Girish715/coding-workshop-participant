@@ -1,16 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useMediaQuery } from 'react-responsive';
 import {
   AppBar, Toolbar, Typography, Drawer, List, ListItemButton, ListItemIcon,
-  ListItemText, Box, IconButton, Avatar, Menu, MenuItem, Divider,
+  ListItemText, Box, IconButton, Avatar, Menu, MenuItem, Divider, Badge,
+  Popover, CircularProgress, Button,
 } from '@mui/material';
 import {
   Menu as MenuIcon, Dashboard, People, RateReview, TrendingUp,
   School, Psychology, Logout, Notifications, Settings, HelpOutline, DarkMode, LightMode,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, DoneAll, Circle,
 } from '@mui/icons-material';
 import { useAuth } from '../AuthContext.jsx';
+import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../services/api.js';
+import ChatbotWidget from './ChatbotWidget.jsx';
 
 const DRAWER_WIDTH = 230;
 const COLLAPSED_DRAWER_WIDTH = 74;
@@ -32,7 +35,60 @@ export default function Layout({ colorMode, onToggleColorMode }) {
   const isMobile = useMediaQuery({ maxWidth: 900 });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [notifAnchorEl, setNotifAnchorEl] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifLoading, setNotifLoading] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY) === 'true');
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const { data } = await getNotifications({ limit: 20 });
+      setNotifications(data.notifications);
+      setUnreadCount(data.unread_count);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  const handleNotifOpen = (e) => {
+    setNotifAnchorEl(e.currentTarget);
+    fetchNotifications();
+  };
+
+  const handleMarkRead = async (id) => {
+    try {
+      await markNotificationRead(id);
+      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch { /* ignore */ }
+  };
+
+  const handleMarkAllRead = async () => {
+    setNotifLoading(true);
+    try {
+      await markAllNotificationsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch { /* ignore */ }
+    setNotifLoading(false);
+  };
+
+  const formatTimeAgo = (dateStr) => {
+    if (!dateStr) return '';
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  };
   const isEmployee = user?.role === 'employee';
   const employeeNav = employee?.id
     ? [
@@ -44,7 +100,9 @@ export default function Layout({ colorMode, onToggleColorMode }) {
       { label: 'My Training', icon: <School />, path: '/my-progress/training' },
     ]
     : [{ label: 'Dashboard', icon: <Dashboard />, path: '/' }];
-  const navItems = isEmployee ? employeeNav : NAV;
+  const navItems = isEmployee
+    ? employeeNav
+    : NAV;
   const drawerWidth = sidebarCollapsed ? COLLAPSED_DRAWER_WIDTH : DRAWER_WIDTH;
 
   const toggleSidebarCollapsed = () => {
@@ -194,8 +252,11 @@ export default function Layout({ colorMode, onToggleColorMode }) {
             >
               {colorMode === 'dark' ? <LightMode sx={{ fontSize: 20 }} /> : <DarkMode sx={{ fontSize: 20 }} />}
             </IconButton>
-            <IconButton size="small" sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-              <Notifications sx={{ fontSize: 20 }} />
+            <IconButton size="small" onClick={handleNotifOpen} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
+              <Badge badgeContent={unreadCount} color="error" max={99}
+                sx={{ '& .MuiBadge-badge': { fontSize: '0.625rem', minWidth: 16, height: 16, padding: '0 4px' } }}>
+                <Notifications sx={{ fontSize: 20 }} />
+              </Badge>
             </IconButton>
             <IconButton size="small" sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
               <Settings sx={{ fontSize: 20 }} />
@@ -229,6 +290,66 @@ export default function Layout({ colorMode, onToggleColorMode }) {
               <Logout fontSize="small" sx={{ mr: 1.5 }} /> Sign out
             </MenuItem>
           </Menu>
+
+          {/* Notification popover */}
+          <Popover
+            open={Boolean(notifAnchorEl)}
+            anchorEl={notifAnchorEl}
+            onClose={() => setNotifAnchorEl(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            PaperProps={{
+              sx: {
+                width: 380, maxHeight: 480, mt: 1,
+                border: (theme) => `1px solid ${theme.palette.divider}`,
+                borderRadius: 3,
+                bgcolor: 'background.paper',
+              },
+            }}
+          >
+            <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: (theme) => `1px solid ${theme.palette.divider}` }}>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Notifications</Typography>
+              {unreadCount > 0 && (
+                <Button size="small" startIcon={<DoneAll sx={{ fontSize: 14 }} />} onClick={handleMarkAllRead} disabled={notifLoading}
+                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}>
+                  Mark all read
+                </Button>
+              )}
+            </Box>
+            <Box sx={{ overflowY: 'auto', maxHeight: 400 }}>
+              {notifications.length === 0 ? (
+                <Box sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography sx={{ color: 'text.secondary', fontSize: '0.8125rem' }}>No notifications yet</Typography>
+                </Box>
+              ) : (
+                notifications.map((n) => (
+                  <Box
+                    key={n.id}
+                    onClick={() => { if (!n.is_read) handleMarkRead(n.id); }}
+                    sx={{
+                      px: 2, py: 1.25, cursor: n.is_read ? 'default' : 'pointer',
+                      bgcolor: n.is_read ? 'transparent' : (theme) => (theme.palette.mode === 'dark' ? 'rgba(255,122,26,0.06)' : 'rgba(255,122,26,0.04)'),
+                      borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+                      '&:hover': { bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255,122,26,0.1)' : 'rgba(255,122,26,0.07)') },
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                      {!n.is_read && <Circle sx={{ fontSize: 8, color: 'primary.main', mt: 0.7, flexShrink: 0 }} />}
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: n.is_read ? 500 : 700, fontSize: '0.8125rem', lineHeight: 1.4 }}>{n.title}</Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', lineHeight: 1.4, mt: 0.25,
+                          overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                          {n.message}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.625rem', color: 'text.secondary', mt: 0.5 }}>{formatTimeAgo(n.created_at)}</Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                ))
+              )}
+            </Box>
+          </Popover>
         </Toolbar>
       </AppBar>
 
@@ -244,6 +365,7 @@ export default function Layout({ colorMode, onToggleColorMode }) {
           <Outlet />
         </Box>
       </Box>
+      <ChatbotWidget />
     </Box>
   );
 }

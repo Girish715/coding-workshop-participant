@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getMe } from './services/api.js';
+import { clearApiCache, getMe } from './services/api.js';
 
 const AuthContext = createContext(null);
 
@@ -26,12 +26,14 @@ export function AuthProvider({ children }) {
 
   const handleLogin = (token, userData, empData) => {
     localStorage.setItem('token', token);
+    clearApiCache();
     setUser(userData);
     setEmployee(empData);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    clearApiCache();
     setUser(null);
     setEmployee(null);
   };

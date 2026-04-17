@@ -3,14 +3,15 @@ import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { AuthProvider, useAuth } from './AuthContext.jsx';
 import Layout from './components/Layout.jsx';
-import LoginPage from './pages/LoginPage.jsx';
-import DashboardPage from './pages/DashboardPage.jsx';
-import EmployeesPage from './pages/EmployeesPage.jsx';
-import EmployeeDetailPage from './pages/EmployeeDetailPage.jsx';
-import ReviewsPage from './pages/ReviewsPage.jsx';
-import DevPlansPage from './pages/DevPlansPage.jsx';
-import CompetenciesPage from './pages/CompetenciesPage.jsx';
-import TrainingPage from './pages/TrainingPage.jsx';
+
+const LoginPage = React.lazy(() => import('./pages/LoginPage.jsx'));
+const DashboardPage = React.lazy(() => import('./pages/DashboardPage.jsx'));
+const EmployeesPage = React.lazy(() => import('./pages/EmployeesPage.jsx'));
+const EmployeeDetailPage = React.lazy(() => import('./pages/EmployeeDetailPage.jsx'));
+const ReviewsPage = React.lazy(() => import('./pages/ReviewsPage.jsx'));
+const DevPlansPage = React.lazy(() => import('./pages/DevPlansPage.jsx'));
+const CompetenciesPage = React.lazy(() => import('./pages/CompetenciesPage.jsx'));
+const TrainingPage = React.lazy(() => import('./pages/TrainingPage.jsx'));
 
 const COLOR_MODE_STORAGE_KEY = 'acme-color-mode';
 
@@ -102,6 +103,25 @@ function buildTheme(mode) {
             backgroundColor: isDark ? '#1b1b1b' : '#fff2e3',
             borderBottom: isDark ? '2px solid #3a2d21' : '2px solid #ecd7c4',
             padding: '12px 16px',
+          },
+          '& .MuiTableCell-head .MuiInputBase-input, & .MuiTableCell-head .MuiSelect-select': {
+            textTransform: 'none',
+            letterSpacing: 'normal',
+            color: isDark ? '#e2cdb6' : '#5d4a38',
+          },
+          '& .MuiTableCell-head .MuiInputBase-input::placeholder': {
+            textTransform: 'none',
+            letterSpacing: 'normal',
+            color: isDark ? '#c4ae97' : '#8a6f53',
+            opacity: 1,
+          },
+          '& .MuiTableCell-head .MuiInputLabel-root': {
+            textTransform: 'none',
+            letterSpacing: 'normal',
+            color: isDark ? '#c4ae97' : '#8a6f53',
+          },
+          '& .MuiTableCell-head .MuiInputLabel-root.Mui-focused': {
+            color: '#ff9a3d',
           },
         },
       },
@@ -228,22 +248,28 @@ function EmployeeOnlyRoute({ children }) {
 function AppRoutes({ colorMode, onToggleColorMode }) {
   const { user, employee, loading } = useAuth();
   if (loading) return <FullPageLoader />;
+  const withSuspense = (element) => (
+    <React.Suspense fallback={<FullPageLoader />}>
+      {element}
+    </React.Suspense>
+  );
+
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
+      <Route path="/login" element={user ? <Navigate to="/" /> : withSuspense(<LoginPage />)} />
       <Route path="/" element={<PrivateRoute><Layout colorMode={colorMode} onToggleColorMode={onToggleColorMode} /></PrivateRoute>}>
-        <Route index element={<DashboardPage />} />
-        <Route path="employees" element={<ManagerRoute><EmployeesPage /></ManagerRoute>} />
-        <Route path="employees/:id" element={<EmployeeDetailRoute><EmployeeDetailPage /></EmployeeDetailRoute>} />
-        <Route path="my-progress/profile" element={<EmployeeOnlyRoute><EmployeeDetailPage employeeIdOverride={employee?.id} /></EmployeeOnlyRoute>} />
-        <Route path="my-progress/reviews" element={<EmployeeOnlyRoute><EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={0} /></EmployeeOnlyRoute>} />
-        <Route path="my-progress/development-plans" element={<EmployeeOnlyRoute><EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={1} /></EmployeeOnlyRoute>} />
-        <Route path="my-progress/competencies" element={<EmployeeOnlyRoute><EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={2} /></EmployeeOnlyRoute>} />
-        <Route path="my-progress/training" element={<EmployeeOnlyRoute><EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={3} /></EmployeeOnlyRoute>} />
-        <Route path="reviews" element={<ManagerRoute><ReviewsPage /></ManagerRoute>} />
-        <Route path="development-plans" element={<ManagerRoute><DevPlansPage /></ManagerRoute>} />
-        <Route path="competencies" element={<ManagerRoute><CompetenciesPage /></ManagerRoute>} />
-        <Route path="training" element={<ManagerRoute><TrainingPage /></ManagerRoute>} />
+        <Route index element={withSuspense(<DashboardPage />)} />
+        <Route path="employees" element={<ManagerRoute>{withSuspense(<EmployeesPage />)}</ManagerRoute>} />
+        <Route path="employees/:id" element={<EmployeeDetailRoute>{withSuspense(<EmployeeDetailPage />)}</EmployeeDetailRoute>} />
+        <Route path="my-progress/profile" element={<EmployeeOnlyRoute>{withSuspense(<EmployeeDetailPage employeeIdOverride={employee?.id} />)}</EmployeeOnlyRoute>} />
+        <Route path="my-progress/reviews" element={<EmployeeOnlyRoute>{withSuspense(<EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={0} />)}</EmployeeOnlyRoute>} />
+        <Route path="my-progress/development-plans" element={<EmployeeOnlyRoute>{withSuspense(<EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={1} />)}</EmployeeOnlyRoute>} />
+        <Route path="my-progress/competencies" element={<EmployeeOnlyRoute>{withSuspense(<EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={2} />)}</EmployeeOnlyRoute>} />
+        <Route path="my-progress/training" element={<EmployeeOnlyRoute>{withSuspense(<EmployeeDetailPage employeeIdOverride={employee?.id} initialTab={3} />)}</EmployeeOnlyRoute>} />
+        <Route path="reviews" element={<ManagerRoute>{withSuspense(<ReviewsPage />)}</ManagerRoute>} />
+        <Route path="development-plans" element={<ManagerRoute>{withSuspense(<DevPlansPage />)}</ManagerRoute>} />
+        <Route path="competencies" element={<ManagerRoute>{withSuspense(<CompetenciesPage />)}</ManagerRoute>} />
+        <Route path="training" element={<ManagerRoute>{withSuspense(<TrainingPage />)}</ManagerRoute>} />
       </Route>
     </Routes>
   );
@@ -265,7 +291,12 @@ export default function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <BrowserRouter>
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
           <AppRoutes colorMode={colorMode} onToggleColorMode={toggleColorMode} />
         </BrowserRouter>
       </AuthProvider>

@@ -1,15 +1,18 @@
 from flask import Blueprint, jsonify, g
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from app import db
 from app.models import Employee, PerformanceReview, DevelopmentPlan, EmployeeCompetency, TrainingRecord
 from app.access_scope import managed_employee_ids
 from app.rbac import roles_required
+from app.cache import cached
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
 
 @dashboard_bp.route("/stats", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("dashboard")
 def get_stats():
     is_manager = g.current_user.role == "manager"
     team_ids = managed_employee_ids() if is_manager else None
@@ -60,9 +63,10 @@ def get_stats():
 
 
 @dashboard_bp.route("/employees/promotion-ready", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("dashboard")
 def promotion_ready_employees():
-    query = PerformanceReview.query.filter_by(promotion_ready=True)
+    query = PerformanceReview.query.options(joinedload(PerformanceReview.employee).joinedload(Employee.user), joinedload(PerformanceReview.employee).joinedload(Employee.manager)).filter_by(promotion_ready=True)
     if g.current_user.role == "manager":
         team_ids = managed_employee_ids()
         if not team_ids:
@@ -72,16 +76,17 @@ def promotion_ready_employees():
     reviews = query.all()
     seen = {}
     for r in reviews:
-        emp = Employee.query.get(r.employee_id)
+        emp = r.employee
         if emp and emp.id not in seen:
             seen[emp.id] = {**emp.to_dict(), "latest_rating": r.overall_rating, "review_period": r.review_period}
     return jsonify(list(seen.values()))
 
 
 @dashboard_bp.route("/employees/high-attrition-risk", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("dashboard")
 def high_attrition_risk_employees():
-    query = PerformanceReview.query.filter_by(attrition_risk="high")
+    query = PerformanceReview.query.options(joinedload(PerformanceReview.employee).joinedload(Employee.user), joinedload(PerformanceReview.employee).joinedload(Employee.manager)).filter_by(attrition_risk="high")
     if g.current_user.role == "manager":
         team_ids = managed_employee_ids()
         if not team_ids:
@@ -91,16 +96,17 @@ def high_attrition_risk_employees():
     reviews = query.all()
     seen = {}
     for r in reviews:
-        emp = Employee.query.get(r.employee_id)
+        emp = r.employee
         if emp and emp.id not in seen:
             seen[emp.id] = {**emp.to_dict(), "latest_rating": r.overall_rating, "attrition_risk": r.attrition_risk, "review_period": r.review_period}
     return jsonify(list(seen.values()))
 
 
 @dashboard_bp.route("/employees/active", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("dashboard")
 def active_employees():
-    query = Employee.query.filter_by(status="active")
+    query = Employee.query.options(joinedload(Employee.user), joinedload(Employee.manager)).filter_by(status="active")
     if g.current_user.role == "manager":
         team_ids = managed_employee_ids()
         if not team_ids:
@@ -112,7 +118,8 @@ def active_employees():
 
 
 @dashboard_bp.route("/employees/training-completed", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("dashboard")
 def training_completed_employees():
     query = (
         db.session.query(
@@ -129,12 +136,13 @@ def training_completed_employees():
             return jsonify([])
         query = query.filter(Employee.id.in_(team_ids))
 
-    results = query.group_by(Employee.id).all()
+    results = query.options(joinedload(Employee.user), joinedload(Employee.manager)).group_by(Employee.id).all()
     return jsonify([{**emp.to_dict(), "completed_trainings": count} for emp, count in results])
 
 
 @dashboard_bp.route("/employees/active-dev-plans", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("dashboard")
 def active_dev_plan_employees():
     query = (
         db.session.query(
@@ -151,12 +159,13 @@ def active_dev_plan_employees():
             return jsonify([])
         query = query.filter(Employee.id.in_(team_ids))
 
-    results = query.group_by(Employee.id).all()
+    results = query.options(joinedload(Employee.user), joinedload(Employee.manager)).group_by(Employee.id).all()
     return jsonify([{**emp.to_dict(), "active_plans": count} for emp, count in results])
 
 
 @dashboard_bp.route("/team-performance", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("dashboard")
 def team_performance():
     query = (
         db.session.query(
@@ -208,7 +217,8 @@ def team_performance():
 
 
 @dashboard_bp.route("/rating-distribution", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("dashboard")
 def rating_distribution():
     query = (
         db.session.query(
@@ -228,7 +238,8 @@ def rating_distribution():
 
 
 @dashboard_bp.route("/department-performance", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("dashboard")
 def department_performance():
     query = (
         db.session.query(
@@ -253,7 +264,8 @@ def department_performance():
 
 
 @dashboard_bp.route("/skill-gaps", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("dashboard")
 def skill_gaps():
     query = (
         db.session.query(
@@ -268,5 +280,5 @@ def skill_gaps():
             return jsonify([])
         query = query.filter(EmployeeCompetency.employee_id.in_(team_ids))
 
-    results = query.all()
+    results = query.options(joinedload(EmployeeCompetency.employee), joinedload(EmployeeCompetency.competency)).all()
     return jsonify([ec.to_dict() for ec in results])

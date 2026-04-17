@@ -44,7 +44,7 @@ def manager_can_access_employee(employee_id: int) -> bool:
     if not user:
         return False
 
-    if user.role == "admin":
+    if user.role in {"admin", "hr"}:
         return True
 
     if user.role != "manager":

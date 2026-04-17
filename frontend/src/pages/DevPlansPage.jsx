@@ -119,14 +119,14 @@ export default function DevPlansPage() {
           setSortField(field);
           setSortDir(dir);
         }} sx={{ minWidth: 190 }}>
-          <MenuItem value="employee_name:asc">Sort: Employee (A-Z)</MenuItem>
-          <MenuItem value="employee_name:desc">Sort: Employee (Z-A)</MenuItem>
-          <MenuItem value="title:asc">Sort: Title (A-Z)</MenuItem>
-          <MenuItem value="title:desc">Sort: Title (Z-A)</MenuItem>
-          <MenuItem value="progress_pct:desc">Sort: Progress (High-Low)</MenuItem>
-          <MenuItem value="progress_pct:asc">Sort: Progress (Low-High)</MenuItem>
-          <MenuItem value="target_date:asc">Sort: Target Date (Earliest)</MenuItem>
-          <MenuItem value="target_date:desc">Sort: Target Date (Latest)</MenuItem>
+          <MenuItem value="employee_name:asc">Employee (A-Z)</MenuItem>
+          <MenuItem value="employee_name:desc">Employee (Z-A)</MenuItem>
+          <MenuItem value="title:asc">Title (A-Z)</MenuItem>
+          <MenuItem value="title:desc">Title (Z-A)</MenuItem>
+          <MenuItem value="progress_pct:desc">Progress (High-Low)</MenuItem>
+          <MenuItem value="progress_pct:asc">Progress (Low-High)</MenuItem>
+          <MenuItem value="target_date:asc">Target Date (Earliest)</MenuItem>
+          <MenuItem value="target_date:desc">Target Date (Latest)</MenuItem>
         </TextField>
       </Box>
 

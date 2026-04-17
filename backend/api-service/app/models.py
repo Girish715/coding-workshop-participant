@@ -9,7 +9,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default="employee")  # admin, manager, employee
+    role = db.Column(db.String(20), nullable=False, default="employee")  # admin, hr, manager, employee
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     employee = db.relationship("Employee", backref="user", uselist=False)
@@ -89,8 +89,8 @@ class PerformanceReview(db.Model):
     reviewer = db.relationship("Employee", foreign_keys=[reviewer_id], backref="reviews_given")
 
     def to_dict(self):
-        emp = Employee.query.get(self.employee_id)
-        rev = Employee.query.get(self.reviewer_id)
+        emp = self.employee
+        rev = self.reviewer
         return {
             "id": self.id,
             "employee_id": self.employee_id,
@@ -126,7 +126,7 @@ class DevelopmentPlan(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
-        emp = Employee.query.get(self.employee_id)
+        emp = self.employee
         return {
             "id": self.id,
             "employee_id": self.employee_id,
@@ -171,7 +171,7 @@ class EmployeeCompetency(db.Model):
     competency = db.relationship("Competency", backref="employee_competencies")
 
     def to_dict(self):
-        emp = Employee.query.get(self.employee_id)
+        emp = self.employee
         return {
             "id": self.id,
             "employee_id": self.employee_id,
@@ -202,7 +202,7 @@ class TrainingRecord(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
-        emp = Employee.query.get(self.employee_id)
+        emp = self.employee
         return {
             "id": self.id,
             "employee_id": self.employee_id,
@@ -215,4 +215,33 @@ class TrainingRecord(db.Model):
             "status": self.status,
             "score": self.score,
             "certificate_url": self.certificate_url,
+        }
+
+
+class Notification(db.Model):
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # review, dev_plan, training, employee, bulk_import, status_change
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+    reference_type = db.Column(db.String(50))  # employee, review, dev_plan, training
+    reference_id = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship("User", backref="notifications")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "type": self.type,
+            "title": self.title,
+            "message": self.message,
+            "is_read": self.is_read,
+            "reference_type": self.reference_type,
+            "reference_id": self.reference_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }

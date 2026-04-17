@@ -1,20 +1,24 @@
 from flask import Blueprint, request, jsonify, g
+from sqlalchemy.orm import joinedload
 from app import db
 from app.models import PerformanceReview
 from app.access_scope import apply_manager_employee_scope, current_employee, manager_can_access_employee
 from app.rbac import roles_required
+from app.cache import cached, invalidate
+from app.notifications import notify_review_created, notify_review_updated
 
 reviews_bp = Blueprint("reviews", __name__)
 
 
 @reviews_bp.route("", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("reviews")
 def list_reviews():
     employee_id = request.args.get("employee_id", type=int)
     status = request.args.get("status")
     period = request.args.get("period")
 
-    query = PerformanceReview.query
+    query = PerformanceReview.query.options(joinedload(PerformanceReview.employee), joinedload(PerformanceReview.reviewer))
     query = apply_manager_employee_scope(query, PerformanceReview.employee_id)
     if employee_id:
         if g.current_user.role == "manager" and not manager_can_access_employee(employee_id):
@@ -30,9 +34,10 @@ def list_reviews():
 
 
 @reviews_bp.route("/<int:review_id>", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("reviews")
 def get_review(review_id):
-    review = PerformanceReview.query.get_or_404(review_id)
+    review = PerformanceReview.query.options(joinedload(PerformanceReview.employee), joinedload(PerformanceReview.reviewer)).get_or_404(review_id)
     if g.current_user.role == "manager" and not manager_can_access_employee(review.employee_id):
         return jsonify({"error": "Access denied"}), 403
 
@@ -40,7 +45,7 @@ def get_review(review_id):
 
 
 @reviews_bp.route("", methods=["POST"])
-@roles_required("admin", "manager")
+@roles_required("admin", "hr", "manager")
 def create_review():
     data = request.get_json()
     if g.current_user.role == "manager" and not manager_can_access_employee(data["employee_id"]):
@@ -68,11 +73,14 @@ def create_review():
     )
     db.session.add(review)
     db.session.commit()
+    invalidate("reviews", "dashboard")
+    notify_review_created(review)
+    db.session.commit()
     return jsonify(review.to_dict()), 201
 
 
 @reviews_bp.route("/<int:review_id>", methods=["PUT"])
-@roles_required("admin", "manager")
+@roles_required("admin", "hr", "manager")
 def update_review(review_id):
     review = PerformanceReview.query.get_or_404(review_id)
     if g.current_user.role == "manager" and not manager_can_access_employee(review.employee_id):
@@ -84,11 +92,14 @@ def update_review(review_id):
         if field in data:
             setattr(review, field, data[field])
     db.session.commit()
+    invalidate("reviews", "dashboard")
+    notify_review_updated(review)
+    db.session.commit()
     return jsonify(review.to_dict())
 
 
 @reviews_bp.route("/<int:review_id>", methods=["DELETE"])
-@roles_required("admin", "manager")
+@roles_required("admin", "hr", "manager")
 def delete_review(review_id):
     review = PerformanceReview.query.get_or_404(review_id)
     if g.current_user.role == "manager" and not manager_can_access_employee(review.employee_id):
@@ -96,4 +107,5 @@ def delete_review(review_id):
 
     db.session.delete(review)
     db.session.commit()
+    invalidate("reviews", "dashboard")
     return jsonify({"message": "Review deleted"}), 200

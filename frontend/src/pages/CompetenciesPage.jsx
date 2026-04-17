@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Typography, Card, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Chip, IconButton, CircularProgress, Stack, Tabs, Tab, InputAdornment, TableSortLabel, useTheme,
+  Chip, IconButton, CircularProgress, Stack, Tabs, Tab, TableSortLabel, useTheme,
 } from '@mui/material';
-import { Add, Delete, Search } from '@mui/icons-material';
+import { Add, Delete } from '@mui/icons-material';
 import {
   getCompetencyCatalog, createCompetency, getEmployeeCompetencies,
   createEmployeeCompetency, deleteEmployeeCompetency, getEmployees,
@@ -23,8 +23,11 @@ export default function CompetenciesPage() {
   const [catForm, setCatForm] = useState({ name: '', category: '', description: '' });
   const [assignForm, setAssignForm] = useState({ employee_id: '', competency_id: '', current_level: 1, target_level: 3 });
   const [loading, setLoading] = useState(true);
-  const [assessmentSearch, setAssessmentSearch] = useState('');
-  const [gapFilter, setGapFilter] = useState('');
+  const [assessmentFilters, setAssessmentFilters] = useState({
+    employee_name: '',
+    competency_name: '',
+    gap: '',
+  });
   const [sortField, setSortField] = useState('employee_name');
   const [sortDir, setSortDir] = useState('asc');
 
@@ -42,16 +45,17 @@ export default function CompetenciesPage() {
 
   const filteredAssessments = useMemo(() => {
     let list = [...empComps];
-    if (assessmentSearch.trim()) {
-      const q = assessmentSearch.toLowerCase();
-      list = list.filter((ec) =>
-        ec.employee_name?.toLowerCase().includes(q)
-        || ec.competency_name?.toLowerCase().includes(q)
-      );
+    if (assessmentFilters.employee_name) {
+      const q = assessmentFilters.employee_name.toLowerCase();
+      list = list.filter((ec) => ec.employee_name?.toLowerCase().includes(q));
     }
-    if (gapFilter === 'met') list = list.filter((ec) => ec.gap === 0);
-    if (gapFilter === 'minor') list = list.filter((ec) => ec.gap === 1);
-    if (gapFilter === 'major') list = list.filter((ec) => ec.gap >= 2);
+    if (assessmentFilters.competency_name) {
+      const q = assessmentFilters.competency_name.toLowerCase();
+      list = list.filter((ec) => ec.competency_name?.toLowerCase().includes(q));
+    }
+    if (assessmentFilters.gap === 'met') list = list.filter((ec) => ec.gap === 0);
+    if (assessmentFilters.gap === 'minor') list = list.filter((ec) => ec.gap === 1);
+    if (assessmentFilters.gap === 'major') list = list.filter((ec) => ec.gap >= 2);
     list.sort((a, b) => {
       const av = a[sortField];
       const bv = b[sortField];
@@ -63,7 +67,7 @@ export default function CompetenciesPage() {
         : `${bv ?? ''}`.localeCompare(`${av ?? ''}`);
     });
     return list;
-  }, [empComps, assessmentSearch, gapFilter, sortField, sortDir]);
+  }, [empComps, assessmentFilters, sortField, sortDir]);
 
   const handleSort = (field) => {
     setSortDir(sortField === field && sortDir === 'asc' ? 'desc' : 'asc');
@@ -131,30 +135,6 @@ export default function CompetenciesPage() {
         <>
           <Typography sx={{ color: '#6b7280', mb: 1.25 }}>{filteredAssessments.length} of {empComps.length} assessments</Typography>
           <Button variant="contained" color="secondary" startIcon={<Add />} sx={{ mb: 2 }} onClick={() => setOpenAssign(true)}>Assign Competency</Button>
-          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2.5 }}>
-            <TextField
-              placeholder="Search employee or competency..."
-              size="small"
-              value={assessmentSearch}
-              onChange={(e) => setAssessmentSearch(e.target.value)}
-              sx={{ width: { xs: '100%', sm: 280 } }}
-              InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: '#9ca3af', fontSize: 20 }} /></InputAdornment> }}
-            />
-            <TextField
-              select
-              size="small"
-              label="Gap"
-              value={gapFilter}
-              onChange={(e) => setGapFilter(e.target.value)}
-              sx={{ minWidth: 170 }}
-            >
-              <MenuItem value="">All Gaps</MenuItem>
-              <MenuItem value="met">Met</MenuItem>
-              <MenuItem value="minor">Minor gap (1)</MenuItem>
-              <MenuItem value="major">Major gap (2+)</MenuItem>
-            </TextField>
-          </Box>
-
           {filteredAssessments.length === 0 ? (
             <Card sx={{ p: 4, textAlign: 'center' }}>
               <Typography sx={{ color: '#9ca3af' }}>{empComps.length === 0 ? 'No assessments found.' : 'No assessments match your filters.'}</Typography>
@@ -170,6 +150,41 @@ export default function CompetenciesPage() {
                     <TableCell><TableSortLabel active={sortField === 'target_level'} direction={sortField === 'target_level' ? sortDir : 'asc'} onClick={() => handleSort('target_level')}>Target</TableSortLabel></TableCell>
                     <TableCell><TableSortLabel active={sortField === 'gap'} direction={sortField === 'gap' ? sortDir : 'asc'} onClick={() => handleSort('gap')}>Gap</TableSortLabel></TableCell>
                     <TableCell width={60}></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>
+                      <TextField
+                        size="small"
+                        placeholder="Employee"
+                        value={assessmentFilters.employee_name}
+                        onChange={(e) => setAssessmentFilters((prev) => ({ ...prev, employee_name: e.target.value }))}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        size="small"
+                        placeholder="Competency"
+                        value={assessmentFilters.competency_name}
+                        onChange={(e) => setAssessmentFilters((prev) => ({ ...prev, competency_name: e.target.value }))}
+                      />
+                    </TableCell>
+                    <TableCell />
+                    <TableCell />
+                    <TableCell>
+                      <TextField
+                        select
+                        size="small"
+                        value={assessmentFilters.gap}
+                        onChange={(e) => setAssessmentFilters((prev) => ({ ...prev, gap: e.target.value }))}
+                        sx={{ minWidth: 130 }}
+                      >
+                        <MenuItem value="">All</MenuItem>
+                        <MenuItem value="met">Met</MenuItem>
+                        <MenuItem value="minor">Minor</MenuItem>
+                        <MenuItem value="major">Major</MenuItem>
+                      </TextField>
+                    </TableCell>
+                    <TableCell />
                   </TableRow></TableHead>
                   <TableBody>
                     {filteredAssessments.map((ec) => (

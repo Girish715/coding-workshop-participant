@@ -1,0 +1,95 @@
+{
+    "DBClusters": [
+        {
+            "AllocatedStorage": 1,
+            "AvailabilityZones": [
+                "ap-south-1c",
+                "ap-south-1a",
+                "ap-south-1b"
+            ],
+            "BackupRetentionPeriod": 7,
+            "DatabaseName": "codingworkshop",
+            "DBClusterIdentifier": "coding-workshop-rds-b53514b0",
+            "DBClusterParameterGroup": "default.aurora-postgresql17",
+            "DBSubnetGroup": "coding-workshop-rds-subnet-group-b53514b0",
+            "Status": "available",
+            "EarliestRestorableTime": "2026-04-15T02:16:00.960000+00:00",
+            "Endpoint": "coding-workshop-rds-b53514b0.cluster-cl42uwy60794.ap-south-1.rds.amazonaws.com",
+            "ReaderEndpoint": "coding-workshop-rds-b53514b0.cluster-ro-cl42uwy60794.ap-south-1.rds.amazonaws.com",
+            "MultiAZ": false,
+            "Engine": "aurora-postgresql",
+            "EngineVersion": "17.7",
+            "LatestRestorableTime": "2026-04-16T17:48:19.807000+00:00",
+            "Port": 5432,
+            "MasterUsername": "superadmin",
+            "PreferredBackupWindow": "07:00-09:00",
+            "PreferredMaintenanceWindow": "fri:06:16-fri:06:46",
+            "UpgradeRolloutOrder": "second",
+            "ReadReplicaIdentifiers": [],
+            "DBClusterMembers": [],
+            "VpcSecurityGroups": [
+                {
+                    "VpcSecurityGroupId": "sg-059bd04235a793604",
+                    "Status": "active"
+                }
+            ],
+            "HostedZoneId": "Z2VFMSZA74J7XZ",
+            "StorageEncrypted": true,
+            "StorageEncryptionType": "sse-kms",
+            "KmsKeyId": "arn:aws:kms:ap-south-1:332991882156:key/8c8687b2-d5f5-4374-b076-37c5b98c62ee",
+            "DbClusterResourceId": "cluster-7BHSLOEBOFL2RF6AYEMJCWEJIY",
+            "DBClusterArn": "arn:aws:rds:ap-south-1:332991882156:cluster:coding-workshop-rds-b53514b0",
+            "AssociatedRoles": [],
+            "IAMDatabaseAuthenticationEnabled": false,
+            "ClusterCreateTime": "2026-04-15T02:15:38.493000+00:00",
+            "EnabledCloudwatchLogsExports": [
+                "postgresql"
+            ],
+            "EngineMode": "provisioned",
+            "AutoMinorVersionUpgrade": true,
+            "DeletionProtection": false,
+            "HttpEndpointEnabled": false,
+            "ActivityStreamStatus": "stopped",
+            "CopyTagsToSnapshot": false,
+            "CrossAccountClone": false,
+            "DomainMemberships": [],
+            "TagList": [
+                {
+                    "Key": "environment",
+                    "Value": "default"
+                },
+                {
+                    "Key": "application",
+                    "Value": "coding-workshop"
+                },
+                {
+                    "Key": "event",
+                    "Value": "db26f1dc"
+                },
+                {
+                    "Key": "participant",
+                    "Value": "b53514b0"
+                },
+                {
+                    "Key": "contact",
+                    "Value": "github.com/eistrati"
+                },
+                {
+                    "Key": "awsApplication",
+                    "Value": "arn:aws:resource-groups:ap-south-1:332991882156:group/coding-workshop-b53514b0/02um2wtwlbjr8chab97qrocuf2"
+                }
+            ],
+            "NetworkType": "IPV4",
+            "ServerlessV2ScalingConfiguration": {
+                "MinCapacity": 0.0,
+                "MaxCapacity": 4.0,
+                "SecondsUntilAutoPause": 300
+            },
+            "ServerlessV2PlatformVersion": "4",
+            "DatabaseInsightsMode": "standard",
+            "LocalWriteForwardingStatus": "disabled",
+            "EngineLifecycleSupport": "open-source-rds-extended-support",
+            "VPCNetworkingEnabled": true
+        }
+    ]
+}

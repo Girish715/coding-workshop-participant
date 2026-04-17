@@ -39,3 +39,11 @@ variable "aws_postgres_host" {
   type        = string
   default     = null
 }
+
+# Gemini API key used by chatbot lambda runtime.
+variable "gemini_api_key" {
+  description = "Gemini API key for admin/manager chatbot access."
+  type        = string
+  default     = ""
+  sensitive   = true
+}

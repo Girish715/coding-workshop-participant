@@ -172,6 +172,7 @@ export default function LoginPage() {
             <Stack spacing={0.75}>
               {[
                 { role: 'Admin', email: 'admin@acme.com', pw: 'admin123', color: '#ff7a1a' },
+                { role: 'HR', email: 'hr1@acme.com', pw: 'hr123', color: '#ff8f57' },
                 { role: 'Manager', email: 'mgr1@acme.com', pw: 'mgr123', color: '#ff9a3d' },
                 { role: 'Employee', email: 'emp1@acme.com', pw: 'emp123', color: '#ffb84d' },
               ].map((c) => (

@@ -1,19 +1,23 @@
 from flask import Blueprint, request, jsonify, g
+from sqlalchemy.orm import joinedload
 from app import db
 from app.models import TrainingRecord
 from app.access_scope import apply_manager_employee_scope, manager_can_access_employee
 from app.rbac import roles_required
+from app.cache import cached, invalidate
+from app.notifications import notify_training_created, notify_training_updated
 
 training_bp = Blueprint("training", __name__)
 
 
 @training_bp.route("", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("training")
 def list_training():
     employee_id = request.args.get("employee_id", type=int)
     status = request.args.get("status")
 
-    query = TrainingRecord.query
+    query = TrainingRecord.query.options(joinedload(TrainingRecord.employee))
     query = apply_manager_employee_scope(query, TrainingRecord.employee_id)
     if employee_id:
         if g.current_user.role == "manager" and not manager_can_access_employee(employee_id):
@@ -27,9 +31,10 @@ def list_training():
 
 
 @training_bp.route("/<int:record_id>", methods=["GET"])
-@roles_required("admin", "manager", "employee")
+@roles_required("admin", "hr", "manager", "employee")
+@cached("training")
 def get_training(record_id):
-    record = TrainingRecord.query.get_or_404(record_id)
+    record = TrainingRecord.query.options(joinedload(TrainingRecord.employee)).get_or_404(record_id)
     if g.current_user.role == "manager" and not manager_can_access_employee(record.employee_id):
         return jsonify({"error": "Access denied"}), 403
 
@@ -37,7 +42,7 @@ def get_training(record_id):
 
 
 @training_bp.route("", methods=["POST"])
-@roles_required("admin", "manager")
+@roles_required("admin", "hr", "manager")
 def create_training():
     data = request.get_json()
     if g.current_user.role == "manager" and not manager_can_access_employee(data["employee_id"]):
@@ -56,11 +61,14 @@ def create_training():
     )
     db.session.add(record)
     db.session.commit()
+    invalidate("training", "dashboard")
+    notify_training_created(record)
+    db.session.commit()
     return jsonify(record.to_dict()), 201
 
 
 @training_bp.route("/<int:record_id>", methods=["PUT"])
-@roles_required("admin", "manager")
+@roles_required("admin", "hr", "manager")
 def update_training(record_id):
     record = TrainingRecord.query.get_or_404(record_id)
     if g.current_user.role == "manager" and not manager_can_access_employee(record.employee_id):
@@ -72,11 +80,14 @@ def update_training(record_id):
         if field in data:
             setattr(record, field, data[field])
     db.session.commit()
+    invalidate("training", "dashboard")
+    notify_training_updated(record)
+    db.session.commit()
     return jsonify(record.to_dict())
 
 
 @training_bp.route("/<int:record_id>", methods=["DELETE"])
-@roles_required("admin", "manager")
+@roles_required("admin", "hr", "manager")
 def delete_training(record_id):
     record = TrainingRecord.query.get_or_404(record_id)
     if g.current_user.role == "manager" and not manager_can_access_employee(record.employee_id):
@@ -84,4 +95,5 @@ def delete_training(record_id):
 
     db.session.delete(record)
     db.session.commit()
+    invalidate("training", "dashboard")
     return jsonify({"message": "Training record deleted"}), 200

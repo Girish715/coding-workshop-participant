@@ -254,6 +254,22 @@ def seed() -> None:
         ]
         all_employees.extend(admins)
 
+        hr_users = [
+            create_user_and_employee(
+                email="hr1@acme.com",
+                password="hr123",
+                role="hr",
+                first_name="Aisha",
+                last_name="PeopleOps",
+                employee_code=make_employee_code(3),
+                department="HR",
+                designation="HR Business Partner",
+                hire_date=date(2022, 3, 14),
+                status="active",
+            ),
+        ]
+        all_employees.extend(hr_users)
+
         manager_specs = []
         manager_index = 1
         for department, count in DEPARTMENT_MANAGER_COUNTS.items():
@@ -272,7 +288,8 @@ def seed() -> None:
                 manager_index += 1
 
         managers: list[Employee] = []
-        for i, (email, first_name, last_name, department, designation) in enumerate(manager_specs, start=3):
+        manager_start_code = len(all_employees) + 1
+        for i, (email, first_name, last_name, department, designation) in enumerate(manager_specs, start=manager_start_code):
             manager = create_user_and_employee(
                 email=email,
                 password="mgr123",
@@ -292,8 +309,8 @@ def seed() -> None:
             manager.manager_id = None
 
         employee_count = sum(DEPARTMENT_EMPLOYEE_DISTRIBUTION.values())
-        start_index = 3 + len(manager_specs)
-        non_admin_staff: list[Employee] = managers.copy()
+        start_index = manager_start_code + len(manager_specs)
+        non_admin_staff: list[Employee] = [*hr_users, *managers]
 
         department_slots: list[str] = []
         for department, count in DEPARTMENT_EMPLOYEE_DISTRIBUTION.items():
@@ -486,6 +503,7 @@ def seed() -> None:
         print(f"  Training records:     {TrainingRecord.query.count()} (created {training_count})")
         print("\nLogin credentials:")
         print("  Admin:    admin@acme.com / admin123")
+        print("  HR:       hr1@acme.com   / hr123")
         print("  Manager:  mgr1@acme.com  / mgr123")
         print("  Employee: emp1@acme.com  / emp123")
 
